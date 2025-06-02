@@ -14,12 +14,11 @@ UPDATE_INTERVAL = 120
 # Minimum remaining time for PokéStops (seconds)
 MIN_REMAINING_TIME = 180
 
-# Grunt type configuration with gender (based on provided grunts array and gender lists)
+# Grunt type configuration with gender (based on grunts array, excluding NPCs, Kecleon, Gimmighoul Coin)
 POKESTOP_TYPES = {
     'gruntmale': {'ids': [4], 'gender': {4: 'Male'}, 'display': 'Grunt'},
     'gruntfemale': {'ids': [5], 'gender': {5: 'Female'}, 'display': 'Grunt'},
     'bug': {'ids': [6, 7], 'gender': {7: 'Male', 6: 'Female'}, 'display': 'Bug'},
-    'ghost': {'ids': [47, 48], 'gender': {47: 'Male', 48: 'Female'}, 'display': 'Ghost'},
     'dark': {'ids': [10, 11], 'gender': {11: 'Male', 10: 'Female'}, 'display': 'Dark'},
     'dragon': {'ids': [12, 13], 'gender': {13: 'Male', 12: 'Female'}, 'display': 'Dragon'},
     'fairy': {'ids': [14, 15], 'gender': {15: 'Male', 14: 'Female'}, 'display': 'Fairy'},
@@ -40,10 +39,8 @@ POKESTOP_TYPES = {
     'arlo': {'ids': [42], 'gender': {42: 'Male'}, 'display': 'Arlo'},
     'sierra': {'ids': [43], 'gender': {43: 'Female'}, 'display': 'Sierra'},
     'giovanni': {'ids': [44], 'gender': {44: 'Male'}, 'display': 'Giovanni'},
-    'kecleon': {'ids': [9999], 'gender': {9999: 'None'}, 'display': 'Kecleon'},
-    'gimmighoul_coin': {'ids': [9998], 'gender': {9998: 'None'}, 'display': 'Gimmighoul Coin'},
-    'showcase': {'ids': [9997], 'gender': {9997: 'None'}, 'display': 'Showcase'},
-    'npc': {'ids': [500, 501, 502, 503, 504, 505, 506, 507, 508, 509, 510], 'gender': {500: 'None', 501: 'None', 502: 'None', 503: 'None', 504: 'None', 505: 'None', 506: 'None', 507: 'None', 508: 'None', 509: 'None', 510: 'None'}, 'display': 'NPC'}
+    'ghost': {'ids': [47, 48], 'gender': {47: 'Male', 48: 'Female'}, 'display': 'Ghost'},
+    'showcase': {'ids': [9997], 'gender': {9997: 'None'}, 'display': 'Showcase'}
 }
 
 # API endpoints for each location
