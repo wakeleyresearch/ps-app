@@ -8,7 +8,7 @@ import os
 
 app = Flask(__name__)
 
-# Cache file path
+# Cache file path (will be used after adding disk)
 CACHE_FILE = '/app/fairy_pokestops.json'  # Render's writable directory
 # Cache update interval (seconds)
 UPDATE_INTERVAL = 120
@@ -23,15 +23,14 @@ API_ENDPOINTS = {
     'London': 'https://londonpogomap.com/pokestop.php'
 }
 
-# Initialize cache
-if not os.path.exists(CACHE_FILE):
-    with open(CACHE_FILE, 'w') as f:
-        json.dump({
-            'stops': {'NYC': [], 'Vancouver': [], 'Singapore': [], 'London': []},
-            'last_updated': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        }, f)
+# Initialize in-memory cache
+cache_data = {
+    'stops': {'NYC': [], 'Vancouver': [], 'Singapore': [], 'London': []},
+    'last_updated': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+}
 
 def update_cache():
+    global cache_data
     while True:
         try:
             stops_by_location = {'NYC': [], 'Vancouver': [], 'Singapore': [], 'London': []}
@@ -61,11 +60,10 @@ def update_cache():
                 except Exception as e:
                     print(f"❌ Error fetching data for {location}: {e}")
 
-            with open(CACHE_FILE, 'w') as f:
-                json.dump({
-                    'stops': stops_by_location,
-                    'last_updated': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                }, f)
+            cache_data = {
+                'stops': stops_by_location,
+                'last_updated': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            }
             print(f"✅ Cache updated at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}.")
         except Exception as e:
             print(f"❌ Error updating cache: {e}")
@@ -115,13 +113,12 @@ HTML_TEMPLATE = """
 
 @app.route('/')
 def get_fairy_pokestops():
+    global cache_data
     try:
-        with open(CACHE_FILE, 'r') as f:
-            data = json.load(f)
         return render_template_string(
             HTML_TEMPLATE,
-            stops=data.get('stops', {'NYC': [], 'Vancouver': [], 'Singapore': [], 'London': []}),
-            last_updated=data.get('last_updated', 'Unknown')
+            stops=cache_data.get('stops', {'NYC': [], 'Vancouver': [], 'Singapore': [], 'London': []}),
+            last_updated=cache_data.get('last_updated', 'Unknown')
         )
     except Exception:
         # Fallback to fetching data if cache fails
