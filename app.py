@@ -35,7 +35,7 @@ try:
         print(f"✅ Initialized cache file at {CACHE_FILE}")
 except Exception as e:
     print(f"⚠️ Failed to initialize cache file: {e}")
-    # Fallback: Proceed without cache
+    # Proceed without cache; fallback logic will handle data fetching
 
 def update_cache():
     while True:
@@ -70,6 +70,7 @@ def update_cache():
                     print(f"✅ Fetched {len(fairy_stops)} Fairy-type PokéStops for {location}")
                 except Exception as e:
                     print(f"❌ Error fetching data for {location}: {e}")
+                time.sleep(1)  # Delay to avoid rate limits
 
             try:
                 os.makedirs(os.path.dirname(CACHE_FILE), exist_ok=True)
@@ -78,11 +79,10 @@ def update_cache():
                         'stops': stops_by_location,
                         'last_updated': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                     }, f)
-                print(f"✅ Cache updated at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}") 
+                print(f"✅ Cache updated at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
             except Exception as e:
                 print(f"⚠️ Error writing cache: {e}")
-
-            except Exception as e:
+        except Exception as e:
             print(f"❌ Error updating cache: {e}")
         time.sleep(UPDATE_INTERVAL)
 
@@ -94,7 +94,7 @@ HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Fairy-Type Poké</title>
+    <title>Fairy-Type PokéStops</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="refresh" content="120"> <!-- Refresh every 120 seconds -->
     <style>
@@ -109,20 +109,20 @@ HTML_TEMPLATE = """
     </style>
 </head>
 <body>
-    <h1>Fairy-Type Poké</h1>
+    <h1>Fairy-Type PokéStops</h1>
     <p>Last updated: {{ last_updated }}</p>
     <p>Updates every 2 minutes. Only PokéStops with more than 3 minutes remaining are shown.</p>
     {% for location, stops in stops.items() %}
-    <h2>{{ location }}</h2>
-    {% if stops %}
-        <ul>
-        {% for stop in stops %}
-            <li>{{ stop.name }} (<a href="https://maps.google.com/?q={{ stop.lat }},{{ stop.lng }}>{{ stop.lat }}, {{ stop.lng }}</a>) - {{ stop.remaining_time // time 60 }} min {{ stop.remaining_time % 60 }} sec remaining</li>
-        {% endfor %}
-        </ul>
-    {% else %}
-        <p class="no-stops">No Fairy-type PokéStops found in {{ location }}.</p>
-    {% endif %}
+        <h2>{{ location }}</h2>
+        {% if stops %}
+            <ul>
+            {% for stop in stops %}
+                <li>{{ stop.name }} (<a href="https://maps.google.com/?q={{ stop.lat }},{{ stop.lng }}">{{ stop.lat }}, {{ stop.lng }}</a>) - {{ stop.remaining_time // 60 }} min {{ stop.remaining_time % 60 }} sec remaining</li>
+            {% endfor %}
+            </ul>
+        {% else %}
+            <p class="no-stops">No Fairy-type PokéStops found in {{ location }}.</p>
+        {% endif %}
     {% endfor %}
 </body>
 </html>
@@ -170,6 +170,7 @@ def get_fairy_pokestops():
                     stops_by_location[location] = fairy_stops
                 except Exception as e:
                     print(f"❌ Error in fallback fetch for {location}: {e}")
+                time.sleep(1)  # Delay to avoid rate limits
             return render_template_string(
                 HTML_TEMPLATE,
                 stops=stops_by_location,
