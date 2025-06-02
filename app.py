@@ -1,4 +1,4 @@
-from flask import Flask, render_template_string
+from flask import Flask, render_template_string, request
 import requests
 from datetime import datetime
 import time
@@ -8,12 +8,32 @@ import os
 
 app = Flask(__name__)
 
-# Cache file path
-CACHE_FILE = '/app/fairy_pokestops.json'  # Render's persistent disk directory
 # Cache update interval (seconds)
 UPDATE_INTERVAL = 120
 # Minimum remaining time for PokéStops (seconds)
 MIN_REMAINING_TIME = 180
+
+# Type configuration
+POKESTOP_TYPES = {
+    'normal': [1, 2],
+    'fighting': [3, 4],
+    'flying': [5, 6],
+    'poison': [7, 8],
+    'ground': [9, 10],
+    'rock': [11, 12],
+    'bug': [13, 14],
+    'fairy': [14, 15],
+    'ghost': [16, 17],
+    'steel': [18, 19],
+    'fire': [20, 21],
+    'water': [22, 23],
+    'grass': [24, 25],
+    'electric': [26, 27],
+    'psychic': [28, 29],
+    'ice': [30, 31],
+    'dragon': [32, 33],
+    'dark': [34, 35]
+}
 
 # API endpoints for each location
 API_ENDPOINTS = {
@@ -23,21 +43,28 @@ API_ENDPOINTS = {
     'London': 'https://londonpogomap.com/pokestop.php'
 }
 
-# Initialize cache
-try:
-    os.makedirs(os.path.dirname(CACHE_FILE), exist_ok=True)  # Ensure /app exists
-    if not os.path.exists(CACHE_FILE):
-        with open(CACHE_FILE, 'w') as f:
-            json.dump({
-                'stops': {'NYC': [], 'Vancouver': [], 'Singapore': [], 'London': []},
-                'last_updated': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            }, f)
-        print(f"✅ Initialized cache file at {CACHE_FILE}")
-except Exception as e:
-    print(f"⚠️ Failed to initialize cache file: {e}")
-    # Proceed without cache; fallback logic will handle data fetching
+def get_cache_file(pokestop_type):
+    """Return cache file path for the given type."""
+    return f'/app/pokestops_{pokestop_type}.json'
 
-def update_cache():
+def initialize_cache(pokestop_type):
+    """Initialize cache file for the given type."""
+    cache_file = get_cache_file(pokestop_type)
+    try:
+        os.makedirs(os.path.dirname(cache_file), exist_ok=True)
+        if not os.path.exists(cache_file):
+            with open(cache_file, 'w') as f:
+                json.dump({
+                    'stops': {'NYC': [], 'Vancouver': [], 'Singapore': [], 'London': []},
+                    'last_updated': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                }, f)
+            print(f"✅ Initialized cache file at {cache_file}")
+    except Exception as e:
+        print(f"⚠️ Failed to initialize cache file for {pokestop_type}: {e}")
+
+def update_cache(pokestop_type, character_ids):
+    """Update cache for the given type and character IDs."""
+    cache_file = get_cache_file(pokestop_type)
     while True:
         try:
             stops_by_location = {'NYC': [], 'Vancouver': [], 'Singapore': [], 'London': []}
@@ -50,51 +77,56 @@ def update_cache():
                     response = requests.get(url, params=params, headers=headers, timeout=10)
                     response.raise_for_status()
                     data = response.json()
-                    print(f"📡 Debug: Received data for {location}: {json.dumps(data, indent=2)}")
+                    print(f"📡 Debug: Received data for {location} ({pokestop_type}): {json.dumps(data, indent=2)}")
                     meta = data.get('meta', {})
                     time_offset = current_time - int(meta.get('time', current_time))
 
-                    fairy_stops = [
+                    stops = [
                         {
                             'lat': stop['lat'],
                             'lng': stop['lng'],
                             'name': stop.get('name', f'Unnamed PokéStop ({location})'),
-                            'remaining_time': stop['invasion_end'] - (current_time - time_offset)
+                            'remaining_time': stop['invasion_end'] - (current_time - time_offset),
+                            'character': stop.get('character')
                         }
                         for stop in data.get('invasions', [])
-                        # Comment out the next line to debug all fairy-type PokéStops (ignore time filter)
-                        # if stop.get('character') in [14, 15]
-                        if stop.get('character') in [14, 15] and (stop['invasion_end'] - (current_time - time_offset)) > MIN_REMAINING_TIME
+                        # Comment out the next line to debug all {pokestop_type}-type PokéStops (ignore time filter)
+                        # if stop.get('character') in character_ids
+                        if stop.get('character') in character_ids and (stop['invasion_end'] - (current_time - time_offset)) > MIN_REMAINING_TIME
                     ]
-                    stops_by_location[location] = fairy_stops
-                    print(f"✅ Fetched {len(fairy_stops)} Fairy-type PokéStops for {location}")
+                    stops_by_location[location] = [
+                        {k: v for k, v in stop.items() if k != 'character'} for stop in stops
+                    ]
+                    print(f"✅ Fetched {len(stops_by_location[location])} {pokestop_type.capitalize()}-type PokéStops for {location}")
                 except Exception as e:
-                    print(f"❌ Error fetching data for {location}: {e}")
+                    print(f"❌ Error fetching data for {location} ({pokestop_type}): {e}")
                 time.sleep(1)  # Delay to avoid rate limits
 
             try:
-                os.makedirs(os.path.dirname(CACHE_FILE), exist_ok=True)
-                with open(CACHE_FILE, 'w') as f:
+                os.makedirs(os.path.dirname(cache_file), exist_ok=True)
+                with open(cache_file, 'w') as f:
                     json.dump({
                         'stops': stops_by_location,
                         'last_updated': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                     }, f)
-                print(f"✅ Cache updated at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+                print(f"✅ Cache updated for {pokestop_type} at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
             except Exception as e:
-                print(f"⚠️ Error writing cache: {e}")
+                print(f"⚠️ Error writing cache for {pokestop_type}: {e}")
         except Exception as e:
-            print(f"❌ Error updating cache: {e}")
+            print(f"❌ Error updating cache for {pokestop_type}: {e}")
         time.sleep(UPDATE_INTERVAL)
 
-# Start cache update thread
-threading.Thread(target=update_cache, daemon=True).start()
+# Start cache update threads for all types
+for pokestop_type, character_ids in POKESTOP_TYPES.items():
+    initialize_cache(pokestop_type)
+    threading.Thread(target=update_cache, args=(pokestop_type, character_ids), daemon=True).start()
 
 # HTML template
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Fairy-Type PokéStops</title>
+    <title>{{ pokestop_type.capitalize() }}-Type PokéStops</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="refresh" content="120"> <!-- Refresh every 120 seconds -->
     <style>
@@ -109,9 +141,14 @@ HTML_TEMPLATE = """
     </style>
 </head>
 <body>
-    <h1>Fairy-Type PokéStops</h1>
+    <h1>{{ pokestop_type.capitalize() }}-Type PokéStops</h1>
     <p>Last updated: {{ last_updated }}</p>
     <p>Updates every 2 minutes. Only PokéStops with more than 3 minutes remaining are shown.</p>
+    <p>Switch type: 
+    {% for type in types %}
+        <a href="?type={{ type }}">{{ type.capitalize() }}</a>{% if not loop.last %}, {% endif %}
+    {% endfor %}
+    </p>
     {% for location, stops in stops.items() %}
         <h2>{{ location }}</h2>
         {% if stops %}
@@ -121,7 +158,7 @@ HTML_TEMPLATE = """
             {% endfor %}
             </ul>
         {% else %}
-            <p class="no-stops">No Fairy-type PokéStops found in {{ location }}.</p>
+            <p class="no-stops">No {{ pokestop_type.capitalize() }}-type PokéStops found in {{ location }}.</p>
         {% endif %}
     {% endfor %}
 </body>
@@ -129,22 +166,31 @@ HTML_TEMPLATE = """
 """
 
 @app.route('/')
-def get_fairy_pokestops():
+def get_pokestops():
+    # Get type from query parameter, default to 'fire'
+    pokestop_type = request.args.get('type', 'fire').lower()
+    if pokestop_type not in POKESTOP_TYPES:
+        pokestop_type = 'fire'  # Fallback to fire if invalid
+    cache_file = get_cache_file(pokestop_type)
+
     try:
-        with open(CACHE_FILE, 'r') as f:
+        with open(cache_file, 'r') as f:
             data = json.load(f)
-        print(f"📖 Debug: Loaded cache from {CACHE_FILE}")
+        print(f"📖 Debug: Loaded cache for {pokestop_type} from {cache_file}")
         return render_template_string(
             HTML_TEMPLATE,
             stops=data.get('stops', {'NYC': [], 'Vancouver': [], 'Singapore': [], 'London': []}),
-            last_updated=data.get('last_updated', 'Unknown')
+            last_updated=data.get('last_updated', 'Unknown'),
+            pokestop_type=pokestop_type,
+            types=POKESTOP_TYPES.keys()
         )
     except Exception as e:
-        print(f"⚠️ Error reading cache: {e}")
+        print(f"⚠️ Error reading cache for {pokestop_type}: {e}")
         # Fallback to fetching data
         try:
             stops_by_location = {'NYC': [], 'Vancouver': [], 'Singapore': [], 'London': []}
             current_time = time.time()
+            character_ids = POKESTOP_TYPES[pokestop_type]
             for location, url in API_ENDPOINTS.items():
                 try:
                     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0'}
@@ -152,36 +198,43 @@ def get_fairy_pokestops():
                     response = requests.get(url, params=params, headers=headers, timeout=10)
                     response.raise_for_status()
                     data = response.json()
-                    print(f"📡 Debug: Fallback fetch for {location}: {json.dumps(data, indent=2)}")
+                    print(f"📡 Debug: Fallback fetch for {location} ({pokestop_type}): {json.dumps(data, indent=2)}")
                     meta = data.get('meta', {})
                     time_offset = current_time - int(meta.get('time', current_time))
-                    fairy_stops = [
+                    stops = [
                         {
                             'lat': stop['lat'],
                             'lng': stop['lng'],
                             'name': stop.get('name', f'Unnamed PokéStop ({location})'),
-                            'remaining_time': stop['invasion_end'] - (current_time - time_offset)
+                            'remaining_time': stop['invasion_end'] - (current_time - time_offset),
+                            'character': stop.get('character')
                         }
                         for stop in data.get('invasions', [])
-                        # Comment out the next line to debug all fairy-type PokéStops
-                        # if stop.get('character') in [14, 15]
-                        if stop.get('character') in [14, 15] and (stop['invasion_end'] - (current_time - time_offset)) > MIN_REMAINING_TIME
+                        # Comment out the next line to debug all {pokestop_type}-type PokéStops
+                        # if stop.get('character') in character_ids
+                        if stop.get('character') in character_ids and (stop['invasion_end'] - (current_time - time_offset)) > MIN_REMAINING_TIME
                     ]
-                    stops_by_location[location] = fairy_stops
+                    stops_by_location[location] = [
+                        {k: v for k, v in stop.items() if k != 'character'} for stop in stops
+                    ]
                 except Exception as e:
-                    print(f"❌ Error in fallback fetch for {location}: {e}")
+                    print(f"❌ Error in fallback fetch for {location} ({pokestop_type}): {e}")
                 time.sleep(1)  # Delay to avoid rate limits
             return render_template_string(
                 HTML_TEMPLATE,
                 stops=stops_by_location,
-                last_updated=datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                last_updated=datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                pokestop_type=pokestop_type,
+                types=POKESTOP_TYPES.keys()
             )
         except Exception as e:
-            print(f"❌ Fallback failed: {e}")
+            print(f"❌ Fallback failed for {pokestop_type}: {e}")
             return render_template_string(
                 HTML_TEMPLATE,
                 stops={'NYC': [], 'Vancouver': [], 'Singapore': [], 'London': []},
-                last_updated=datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                last_updated=datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                pokestop_type=pokestop_type,
+                types=POKESTOP_TYPES.keys()
             )
 
 if __name__ == '__main__':
