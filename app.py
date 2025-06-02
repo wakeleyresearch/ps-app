@@ -8,8 +8,8 @@ import os
 
 app = Flask(__name__)
 
-# Cache file path (will be used after adding disk)
-CACHE_FILE = '/app/fairy_pokestops.json'  # Render's writable directory
+# Cache file path
+CACHE_FILE = '/app/fairy_pokestops.json'  # Render's persistent disk directory
 # Cache update interval (seconds)
 UPDATE_INTERVAL = 120
 # Minimum remaining time for PokéStops (seconds)
@@ -23,25 +23,34 @@ API_ENDPOINTS = {
     'London': 'https://londonpogomap.com/pokestop.php'
 }
 
-# Initialize in-memory cache
-cache_data = {
-    'stops': {'NYC': [], 'Vancouver': [], 'Singapore': [], 'London': []},
-    'last_updated': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-}
+# Initialize cache
+try:
+    os.makedirs(os.path.dirname(CACHE_FILE), exist_ok=True)  # Ensure /app exists
+    if not os.path.exists(CACHE_FILE):
+        with open(CACHE_FILE, 'w') as f:
+            json.dump({
+                'stops': {'NYC': [], 'Vancouver': [], 'Singapore': [], 'London': []},
+                'last_updated': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            }, f)
+        print(f"✅ Initialized cache file at {CACHE_FILE}")
+except Exception as e:
+    print(f"⚠️ Failed to initialize cache file: {e}")
+    # Fallback: Proceed without cache
 
 def update_cache():
-    global cache_data
     while True:
         try:
             stops_by_location = {'NYC': [], 'Vancouver': [], 'Singapore': [], 'London': []}
-            current_time = int(time.time())
+            current_time = time.time()
 
             for location, url in API_ENDPOINTS.items():
                 try:
                     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0'}
-                    response = requests.get(url, params={'time': int(time.time() * 1000)}, headers=headers, timeout=10)
+                    params = {'time': int(current_time * 1000)}
+                    response = requests.get(url, params=params, headers=headers, timeout=10)
                     response.raise_for_status()
                     data = response.json()
+                    print(f"📡 Debug: Received data for {location}: {json.dumps(data, indent=2)}")
                     meta = data.get('meta', {})
                     time_offset = current_time - int(meta.get('time', current_time))
 
@@ -49,23 +58,31 @@ def update_cache():
                         {
                             'lat': stop['lat'],
                             'lng': stop['lng'],
-                            'name': stop['name'] or f'Unnamed PokéStop ({location})',
+                            'name': stop.get('name', f'Unnamed PokéStop ({location})'),
                             'remaining_time': stop['invasion_end'] - (current_time - time_offset)
                         }
                         for stop in data.get('invasions', [])
+                        # Comment out the next line to debug all fairy-type PokéStops (ignore time filter)
+                        # if stop.get('character') in [14, 15]
                         if stop.get('character') in [14, 15] and (stop['invasion_end'] - (current_time - time_offset)) > MIN_REMAINING_TIME
                     ]
                     stops_by_location[location] = fairy_stops
-                    print(f"✅ Fetched {len(fairy_stops)} Fairy-type PokéStops for {location}.")
+                    print(f"✅ Fetched {len(fairy_stops)} Fairy-type PokéStops for {location}")
                 except Exception as e:
                     print(f"❌ Error fetching data for {location}: {e}")
 
-            cache_data = {
-                'stops': stops_by_location,
-                'last_updated': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            }
-            print(f"✅ Cache updated at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}.")
-        except Exception as e:
+            try:
+                os.makedirs(os.path.dirname(CACHE_FILE), exist_ok=True)
+                with open(CACHE_FILE, 'w') as f:
+                    json.dump({
+                        'stops': stops_by_location,
+                        'last_updated': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    }, f)
+                print(f"✅ Cache updated at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}") 
+            except Exception as e:
+                print(f"⚠️ Error writing cache: {e}")
+
+            except Exception as e:
             print(f"❌ Error updating cache: {e}")
         time.sleep(UPDATE_INTERVAL)
 
@@ -77,7 +94,7 @@ HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Fairy-Type PokéStops</title>
+    <title>Fairy-Type Poké</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="refresh" content="120"> <!-- Refresh every 120 seconds -->
     <style>
@@ -92,20 +109,20 @@ HTML_TEMPLATE = """
     </style>
 </head>
 <body>
-    <h1>Fairy-Type PokéStops</h1>
+    <h1>Fairy-Type Poké</h1>
     <p>Last updated: {{ last_updated }}</p>
     <p>Updates every 2 minutes. Only PokéStops with more than 3 minutes remaining are shown.</p>
     {% for location, stops in stops.items() %}
-        <h2>{{ location }}</h2>
-        {% if stops %}
-            <ul>
-            {% for stop in stops %}
-                <li>{{ stop.name }} (<a href="https://maps.google.com/?q={{ stop.lat }},{{ stop.lng }}">{{ stop.lat }}, {{ stop.lng }}</a>) - {{ stop.remaining_time // 60 }} min {{ stop.remaining_time % 60 }} sec remaining</li>
-            {% endfor %}
-            </ul>
-        {% else %}
-            <p class="no-stops">No Fairy-type PokéStops found in {{ location }}.</p>
-        {% endif %}
+    <h2>{{ location }}</h2>
+    {% if stops %}
+        <ul>
+        {% for stop in stops %}
+            <li>{{ stop.name }} (<a href="https://maps.google.com/?q={{ stop.lat }},{{ stop.lng }}>{{ stop.lat }}, {{ stop.lng }}</a>) - {{ stop.remaining_time // time 60 }} min {{ stop.remaining_time % 60 }} sec remaining</li>
+        {% endfor %}
+        </ul>
+    {% else %}
+        <p class="no-stops">No Fairy-type PokéStops found in {{ location }}.</p>
+    {% endif %}
     {% endfor %}
 </body>
 </html>
@@ -113,45 +130,53 @@ HTML_TEMPLATE = """
 
 @app.route('/')
 def get_fairy_pokestops():
-    global cache_data
     try:
+        with open(CACHE_FILE, 'r') as f:
+            data = json.load(f)
+        print(f"📖 Debug: Loaded cache from {CACHE_FILE}")
         return render_template_string(
             HTML_TEMPLATE,
-            stops=cache_data.get('stops', {'NYC': [], 'Vancouver': [], 'Singapore': [], 'London': []}),
-            last_updated=cache_data.get('last_updated', 'Unknown')
+            stops=data.get('stops', {'NYC': [], 'Vancouver': [], 'Singapore': [], 'London': []}),
+            last_updated=data.get('last_updated', 'Unknown')
         )
-    except Exception:
-        # Fallback to fetching data if cache fails
+    except Exception as e:
+        print(f"⚠️ Error reading cache: {e}")
+        # Fallback to fetching data
         try:
             stops_by_location = {'NYC': [], 'Vancouver': [], 'Singapore': [], 'London': []}
-            current_time = int(time.time())
+            current_time = time.time()
             for location, url in API_ENDPOINTS.items():
                 try:
                     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0'}
-                    response = requests.get(url, params={'time': int(time.time() * 1000)}, headers=headers, timeout=10)
+                    params = {'time': int(current_time * 1000)}
+                    response = requests.get(url, params=params, headers=headers, timeout=10)
                     response.raise_for_status()
                     data = response.json()
+                    print(f"📡 Debug: Fallback fetch for {location}: {json.dumps(data, indent=2)}")
                     meta = data.get('meta', {})
                     time_offset = current_time - int(meta.get('time', current_time))
                     fairy_stops = [
                         {
                             'lat': stop['lat'],
                             'lng': stop['lng'],
-                            'name': stop['name'] or f'Unnamed PokéStop ({location})',
+                            'name': stop.get('name', f'Unnamed PokéStop ({location})'),
                             'remaining_time': stop['invasion_end'] - (current_time - time_offset)
                         }
                         for stop in data.get('invasions', [])
+                        # Comment out the next line to debug all fairy-type PokéStops
+                        # if stop.get('character') in [14, 15]
                         if stop.get('character') in [14, 15] and (stop['invasion_end'] - (current_time - time_offset)) > MIN_REMAINING_TIME
                     ]
                     stops_by_location[location] = fairy_stops
-                except:
-                    pass
+                except Exception as e:
+                    print(f"❌ Error in fallback fetch for {location}: {e}")
             return render_template_string(
                 HTML_TEMPLATE,
                 stops=stops_by_location,
                 last_updated=datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             )
-        except:
+        except Exception as e:
+            print(f"❌ Fallback failed: {e}")
             return render_template_string(
                 HTML_TEMPLATE,
                 stops={'NYC': [], 'Vancouver': [], 'Singapore': [], 'London': []},
