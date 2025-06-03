@@ -5,7 +5,8 @@ import time
 import threading
 import json
 import os
-import psutil  # For memory monitoring
+import psutil
+from threading import Lock
 
 app = Flask(__name__)
 
@@ -14,7 +15,7 @@ UPDATE_INTERVAL = 120
 # Minimum remaining time for PokéStops (seconds)
 MIN_REMAINING_TIME = 180
 
-# Grunt type configuration with gender (based on grunts array, excluding NPCs, Kecleon, Gimmighoul Coin)
+# Grunt type configuration (excluding giovanni, arlo, sierra, cliff, showcase, None gender)
 POKESTOP_TYPES = {
     'gruntmale': {'ids': [4], 'gender': {4: 'Male'}, 'display': 'Grunt'},
     'gruntfemale': {'ids': [5], 'gender': {5: 'Female'}, 'display': 'Grunt'},
@@ -35,21 +36,20 @@ POKESTOP_TYPES = {
     'rock': {'ids': [36, 37], 'gender': {37: 'Male', 36: 'Female'}, 'display': 'Rock'},
     'water': {'ids': [38, 39], 'gender': {39: 'Male', 38: 'Female'}, 'display': 'Water'},
     'electric': {'ids': [48, 49], 'gender': {49: 'Male', 48: 'Female'}, 'display': 'Electric'},
-    'cliff': {'ids': [41], 'gender': {41: 'Male'}, 'display': 'Cliff'},
-    'arlo': {'ids': [42], 'gender': {42: 'Male'}, 'display': 'Arlo'},
-    'sierra': {'ids': [43], 'gender': {43: 'Female'}, 'display': 'Sierra'},
-    'giovanni': {'ids': [44], 'gender': {44: 'Male'}, 'display': 'Giovanni'},
-    'ghost': {'ids': [47, 48], 'gender': {47: 'Male', 48: 'Female'}, 'display': 'Ghost'},
-    'showcase': {'ids': [9997], 'gender': {9997: 'None'}, 'display': 'Showcase'}
+    'ghost': {'ids': [47, 48], 'gender': {47: 'Male', 48: 'Female'}, 'display': 'Ghost'}
 }
 
-# API endpoints for each location
+# API endpoints
 API_ENDPOINTS = {
     'NYC': 'https://nycpokemap.com/pokestop.php',
     'Vancouver': 'https://vanpokemap.com/pokestop.php',
     'Singapore': 'https://sgpokemap.com/pokestop.php',
     'London': 'https://londonpogomap.com/pokestop.php'
 }
+
+# Thread-safe set for active types
+active_types = set(['fairy'])  # Default type
+active_types_lock = Lock()
 
 def get_cache_file(pokestop_type):
     """Return cache file path for the given type."""
@@ -76,75 +76,66 @@ def update_cache(pokestop_type, type_info):
     character_ids = type_info['ids']
     gender_map = type_info['gender']
     display_type = type_info['display']
-    try:
-        stops_by_location = {'NYC': [], 'Vancouver': [], 'Singapore': [], 'London': []}
-        current_time = time.time()
-
-        for location, url in API_ENDPOINTS.items():
-            try:
-                headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0'}
-                params = {'time': int(current_time * 1000)}
-                response = requests.get(url, params=params, headers=headers, timeout=10)
-                response.raise_for_status()
-                data = response.json()
-                print(f"📡 Debug: Full API response for {location} ({pokestop_type}): {json.dumps(data, indent=2)}")
-                meta = data.get('meta', {})
-                time_offset = current_time - int(meta.get('time', current_time))
-
-                stops = [
-                    {
-                        'lat': stop['lat'],
-                        'lng': stop['lng'],
-                        'name': stop.get('name', f'Unnamed PokéStop ({location})'),
-                        'remaining_time': stop['invasion_end'] - (current_time - time_offset),
-                        'character': stop.get('character'),
-                        'type': display_type,
-                        'gender': gender_map.get(stop.get('character'), 'Unknown'),
-                        'grunt_dialogue': stop.get('grunt_dialogue', None),
-                        'encounter_pokemon_id': stop.get('encounter_pokemon_id', None)
-                    }
-                    for stop in data.get('invasions', [])
-                    if (
-                        stop.get('character') in character_ids or
-                        (stop.get('grunt_dialogue') and (
-                            'grunt' in stop.get('grunt_dialogue', '').lower() if pokestop_type.startswith('grunt') else
-                            pokestop_type.lower() in stop.get('grunt_dialogue', '').lower()
-                        ))
-                    ) and (stop['invasion_end'] - (current_time - time_offset)) > MIN_REMAINING_TIME
-                ]
-                stops_by_location[location] = stops
-                print(f"✅ Fetched {len(stops_by_location[location])} {display_type} ({pokestop_type}) PokéStops for {location}")
-            except Exception as e:
-                print(f"❌ Error fetching data for {location} ({pokestop_type}): {e}")
-            time.sleep(1)
-
-        try:
-            os.makedirs(os.path.dirname(cache_file), exist_ok=True)
-            with open(cache_file, 'w') as f:
-                json.dump({
-                    'stops': stops_by_location,
-                    'last_updated': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                }, f)
-            print(f"✅ Cache updated for {pokestop_type} at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        except Exception as e:
-            print(f"⚠️ Error writing cache for {pokestop_type}: {e}")
-    except Exception as e:
-        print(f"❌ Error updating cache for {pokestop_type}: {e}")
-
-def update_all_caches():
-    """Update caches for all types in a single thread."""
     while True:
-        for pokestop_type, type_info in POKESTOP_TYPES.items():
-            update_cache(pokestop_type, type_info)
-            process = psutil.Process()
-            memory_info = process.memory_info()
-            print(f"🛠️ Memory usage for {pokestop_type}: {memory_info.rss / 1024 / 1024:.2f} MB")
+        try:
+            stops_by_location = {'NYC': [], 'Vancouver': [], 'Singapore': [], 'London': []}
+            current_time = time.time()
+
+            for location, url in API_ENDPOINTS.items():
+                try:
+                    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0'}
+                    params = {'time': int(current_time * 1000)}
+                    response = requests.get(url, params=params, headers=headers, timeout=10)
+                    response.raise_for_status()
+                    data = response.json()
+                    print(f"📡 Debug: Full API response for {location} ({pokestop_type}): {json.dumps(data, indent=2)}")
+                    meta = data.get('meta', {})
+                    time_offset = current_time - int(meta.get('time', current_time))
+
+                    stops = [
+                        {
+                            'lat': stop['lat'],
+                            'lng': stop['lng'],
+                            'name': stop.get('name', f'Unnamed PokéStop ({location})'),
+                            'remaining_time': stop['invasion_end'] - (current_time - time_offset),
+                            'character': stop.get('character'),
+                            'type': display_type,
+                            'gender': gender_map.get(stop.get('character'), 'Unknown'),
+                            'grunt_dialogue': stop.get('grunt_dialogue', None),
+                            'encounter_pokemon_id': stop.get('encounter_pokemon_id', None)
+                        }
+                        for stop in data.get('invasions', [])
+                        if (
+                            stop.get('character') in character_ids or
+                            (stop.get('grunt_dialogue') and (
+                                'grunt' in stop.get('grunt_dialogue', '').lower() if pokestop_type.startswith('grunt') else
+                                pokestop_type.lower() in stop.get('grunt_dialogue', '').lower()
+                            ))
+                        ) and (stop['invasion_end'] - (current_time - time_offset)) > MIN_REMAINING_TIME
+                    ]
+                    stops_by_location[location] = stops
+                    print(f"✅ Fetched {len(stops_by_location[location])} {display_type} ({pokestop_type}) PokéStops for {location}")
+                except Exception as e:
+                    print(f"❌ Error fetching data for {location} ({pokestop_type}): {e}")
+                time.sleep(1)
+
+            try:
+                os.makedirs(os.path.dirname(cache_file), exist_ok=True)
+                with open(cache_file, 'w') as f:
+                    json.dump({
+                        'stops': stops_by_location,
+                        'last_updated': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    }, f)
+                print(f"✅ Cache updated for {pokestop_type} at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            except Exception as e:
+                print(f"⚠️ Error writing cache for {pokestop_type}: {e}")
+        except Exception as e:
+            print(f"❌ Error updating cache for {pokestop_type}: {e}")
         time.sleep(UPDATE_INTERVAL)
 
-# Initialize caches and start single cache update thread
-for pokestop_type in POKESTOP_TYPES:
-    initialize_cache(pokestop_type)
-threading.Thread(target=update_all_caches, daemon=True).start()
+# Initialize default type cache
+initialize_cache('fairy')
+threading.Thread(target=update_cache, args=('fairy', POKESTOP_TYPES['fairy']), daemon=True).start()
 
 # HTML template
 HTML_TEMPLATE = """
@@ -171,21 +162,21 @@ HTML_TEMPLATE = """
     <p>Last updated: {{ last_updated }}</p>
     <p>Updates every 2 minutes. Only PokéStops with more than 3 minutes remaining are shown.</p>
     <p>Switch type:
-    {% for type in types %}
-        <a href="?type={{ type }}{% if debug %}&debug=true{% endif %}">{{ type.capitalize() }}</a>{% if not loop.last %}, {% endif %}
-    {% endfor %}
+        {% for type in types %}
+            <a href="?type={{ type }}{% if debug %}&debug=true{% endif %}">{{ type.capitalize() }}</a>{% if not loop.last %}, {% endif %}
+        {% endfor %}
     </p>
     {% for location, stops in stops.items() %}
         <h2>{{ location }}</h2>
         {% if stops %}
             <ul>
-            {% for stop in stops %}
-                <li>{{ stop.type }} ({{ stop.gender }}) {{ stop.name }} (<a href="https://maps.google.com/?q={{ stop.lat }},{{ stop.lng }}">{{ stop.lat }}, {{ stop.lng }}</a>) - {{ stop.remaining_time // 60 }} min {{ stop.remaining_time % 60 }} sec remaining
-                {% if debug %}
-                    <span class="debug">(Character: {{ stop.character }}, Dialogue: {{ stop.grunt_dialogue|default('N/A') }}, Encounter ID: {{ stop.encounter_pokemon_id|default('N/A') }})</span>
-                {% endif %}
-                </li>
-            {% endfor %}
+                {% for stop in stops %}
+                    <li>{{ stop.type }} ({{ stop.gender }}) {{ stop.name }} (<a href="https://maps.google.com/?q={{ stop.lat }},{{ stop.lng }}">{{ stop.lat }}, {{ stop.lng }}</a>) - {{ stop.remaining_time // 60 }} min {{ stop.remaining_time % 60 }} sec remaining
+                        {% if debug %}
+                            <span class="debug">(Character: {{ stop.character }}, Dialogue: {{ stop.grunt_dialogue|default('N/A') }}, Encounter ID: {{ stop.encounter_pokemon_id|default('N/A') }})</span>
+                        {% endif %}
+                    </li>
+                {% endfor %}
             </ul>
         {% else %}
             <p class="no-stops">No {{ pokestop_type.capitalize() }}-type PokéStops found in {{ location }}.</p>
@@ -197,9 +188,9 @@ HTML_TEMPLATE = """
             <h2>{{ location }} (All Types)</h2>
             {% if debug_stops %}
                 <ul>
-                {% for stop in debug_stops %}
-                    <li>{{ stop.type }} ({{ stop.gender }}) {{ stop.name }} (<a href="https://maps.google.com/?q={{ stop.lat }},{{ stop.lng }}">{{ stop.lat }}, {{ stop.lng }}</a>) - Character ID: {{ stop.character }} - Dialogue: {{ stop.grunt_dialogue|default('N/A') }} - Encounter ID: {{ stop.encounter_pokemon_id|default('N/A') }} - {{ stop.remaining_time // 60 }} min {{ stop.remaining_time % 60 }} sec remaining</li>
-                {% endfor %}
+                    {% for stop in debug_stops %}
+                        <li>{{ stop.type }} ({{ stop.gender }}) {{ stop.name }} (<a href="https://maps.google.com/?q={{ stop.lat }},{{ stop.lng }}">{{ stop.lat }}, {{ stop.lng }}</a>) - Character ID: {{ stop.character }} - Dialogue: {{ stop.grunt_dialogue|default('N/A') }} - Encounter ID: {{ stop.encounter_pokemon_id|default('N/A') }} - {{ stop.remaining_time // 60 }} min {{ stop.remaining_time % 60 }} sec remaining</li>
+                    {% endfor %}
                 </ul>
             {% else %}
                 <p class="no-stops">No active PokéStops found in {{ location }}.</p>
@@ -212,13 +203,21 @@ HTML_TEMPLATE = """
 
 @app.route('/')
 def get_pokestops():
-    pokestop_type = request.args.get('type', 'fire').lower()
+    pokestop_type = request.args.get('type', 'fairy').lower()
     debug = request.args.get('debug', 'false').lower() == 'true'
     if pokestop_type not in POKESTOP_TYPES:
-        pokestop_type = 'fire'
+        pokestop_type = 'fairy'
     cache_file = get_cache_file(pokestop_type)
     type_info = POKESTOP_TYPES[pokestop_type]
     character_ids = type_info['ids']
+
+    # Start cache thread for new type if not active
+    with active_types_lock:
+        if pokestop_type not in active_types:
+            initialize_cache(pokestop_type)
+            threading.Thread(target=update_cache, args=(pokestop_type, type_info), daemon=True).start()
+            active_types.add(pokestop_type)
+            print(f"🛠️ Started cache thread for {pokestop_type}")
 
     try:
         with open(cache_file, 'r') as f:
@@ -229,7 +228,7 @@ def get_pokestops():
         data = {'stops': {'NYC': [], 'Vancouver': [], 'Singapore': [], 'London': []}, 'last_updated': 'Unknown'}
 
     debug_stops = {'NYC': [], 'Vancouver': [], 'Singapore': [], 'London': []}
-    if not any(data['stops'].values()):
+    if not any(data['stops'].values()) and debug:
         current_time = time.time()
         for location, url in API_ENDPOINTS.items():
             try:
