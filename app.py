@@ -48,7 +48,7 @@ API_ENDPOINTS = {
 }
 
 # Thread-safe set for active types
-active_types = set(['fairy'])  # Default type
+active_types = set(['fairy'])
 active_types_lock = Lock()
 
 def get_cache_file(pokestop_type):
@@ -182,7 +182,7 @@ HTML_TEMPLATE = """
             <p class="no-stops">No {{ pokestop_type.capitalize() }}-type PokéStops found in {{ location }}.</p>
         {% endif %}
     {% endfor %}
-    {% if debug and not any(stops for stops in stops.values()) %}
+    {% if debug and not any(stops) %}
         <p class="no-stops">Debug: No PokéStops found for {{ pokestop_type }}. Showing all active PokéStops (any type):</p>
         {% for location, debug_stops in debug_stops.items() %}
             <h2>{{ location }} (All Types)</h2>
