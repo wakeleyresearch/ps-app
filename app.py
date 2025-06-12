@@ -80,7 +80,7 @@ def update_cache(pokestop_type, type_info):
     gender_map = type_info['gender']
     display_type = type_info['display']
     # NordVPN SOCKS5 proxy configuration (from environment variables)
-    proxy_host = os.environ.get('NORDVPN_PROXY_HOST')  # No default; must be set
+    proxy_host = os.environ.get('NORDVPN_PROXY_HOST')  # Must be set
     proxy_user = os.environ.get('NORDVPN_PROXY_USER')
     proxy_pass = os.environ.get('NORDVPN_PROXY_PASS')
     proxy_url = f'socks5://{proxy_user}:{proxy_pass}@{proxy_host}:1080' if proxy_host and proxy_user and proxy_pass else None
