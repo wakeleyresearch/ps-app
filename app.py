@@ -17,7 +17,7 @@ UPDATE_INTERVAL = 120
 # Minimum remaining time for PokéStops (seconds)
 MIN_REMAINING_TIME = 180
 # Maximum remaining time for PokéStops (seconds, to filter invalid data)
-MAX_REMAINING_TIME = 3200  # 60 minutes
+MAX_REMAINING_TIME = 3600  # 60 minutes
 
 # Grunt type configuration (excluding giovanni, arlo, sierra, cliff, showcase, None gender)
 POKESTOP_TYPES = {
@@ -110,12 +110,16 @@ def update_cache(pokestop_type, type_info):
                         grunt_dialogue = stop.get('grunt_dialogue', '').lower()
                         invasion_type = stop.get('type')
                         remaining_time = stop['invasion_end'] - (current_time - time_offset)
-                        # Filter for grunt invasions (type=1) and valid remaining time
-                        if (
+                        # Strict filtering for grunt invasions and character IDs
+                        is_valid = (
                             invasion_type == 1 and  # Grunt invasions only
                             character_id in character_ids and
                             MIN_REMAINING_TIME < remaining_time <= MAX_REMAINING_TIME
-                        ):
+                        )
+                        # Additional validation for ghost type
+                        if pokestop_type == 'ghost' and is_valid:
+                            is_valid = any(kw in grunt_dialogue for kw in ['ghost', 'ghastly', 'haunt', 'spooky'])
+                        if is_valid:
                             stops.append({
                                 'lat': stop['lat'],
                                 'lng': stop['lng'],
@@ -125,9 +129,10 @@ def update_cache(pokestop_type, type_info):
                                 'type': display_type,
                                 'gender': gender_map.get(character_id, 'Unknown'),
                                 'grunt_dialogue': grunt_dialogue,
-                                'encounter_pokemon_id': stop.get('encounter_pokemon_id', None)
+                                'encounter_pokemon_id': stop.get('encounter_pokemon_id', None),
+                                'invasion_type': invasion_type
                             })
-                        print(f"📡 Debug: {location} ({pokestop_type}) - Character ID: {character_id}, Type: {invasion_type}, Dialogue: {grunt_dialogue[:50]}..., Remaining: {remaining_time/60:.1f} min")
+                        print(f"📡 Debug: {location} ({pokestop_type}) - Character ID: {character_id}, Type: {invasion_type}, Dialogue: {grunt_dialogue[:100]}..., Remaining: {remaining_time/60:.1f} min")
                     stops_by_location[location] = stops
                     print(f"✅ Fetched {len(stops_by_location[location])} {display_type} ({pokestop_type}) PokéStops for {location}")
                 except Exception as e:
@@ -173,7 +178,7 @@ HTML_TEMPLATE = """
     </style>
 </head>
 <body>
-    <h1>{{ pokestop_type.capitalize() }}-Type PokéStops</h1>
+    <h1>{{ type_info[pokestop_type]['display'] }} PokéStops</h1>
     <p>Last updated: {{ last_updated }}</p>
     <p>Updates every 2 minutes. Only PokéStops with more than 3 minutes and less than 30 minutes remaining are shown.</p>
     <p>Switch type:
@@ -191,7 +196,7 @@ HTML_TEMPLATE = """
                 {% for stop in stops %}
                     <li>{{ stop.type }} ({{ stop.gender }}) {{ stop.name }} (<a href="https://maps.google.com/?q={{ stop.lat }},{{ stop.lng }}">{{ stop.lat }}, {{ stop.lng }}</a>) - {{ stop.remaining_time // 60 }} min {{ stop.remaining_time % 60 }} sec remaining
                         {% if debug %}
-                            <span class="debug">(Character: {{ stop.character }}, Dialogue: {{ stop.grunt_dialogue|default('N/A') }}, Encounter ID: {{ stop.encounter_pokemon_id|default('N/A') }})</span>
+                            <span class="debug">(Character: {{ stop.character }}, Type: {{ stop.invasion_type }}, Dialogue: {{ stop.grunt_dialogue|default('N/A') }}, Encounter ID: {{ stop.encounter_pokemon_id|default('N/A') }})</span>
                         {% endif %}
                     </li>
                 {% endfor %}
