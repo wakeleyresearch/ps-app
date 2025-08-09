@@ -51,7 +51,7 @@ API_ENDPOINTS = {
     'Vancouver': 'https://vanpokemap.com/pokestop.php',
     'Singapore': 'https://sgpokemap.com/pokestop.php',
     'London': 'https://londonpogomap.com/pokestop.php',
-    'Sydney': 'https://sydneypogomap.com/pokestop.php'
+    'Sydney': 'https://sydneypogemap.com/pokestop.php'
 }
 
 # Thread-safe set for active types
@@ -118,7 +118,7 @@ def update_cache(pokestop_type, type_info):
                         )
                         # Additional validation for ghost type
                         if pokestop_type == 'ghost' and is_valid:
-                            is_valid = any(kw in grunt_dialogue for kw in ['ghost', 'ghastly', 'haunt', 'spooky'])
+                            is_valid = 'ke...ke...ke' in grunt_dialogue
                         if is_valid:
                             stops.append({
                                 'lat': stop['lat'],
@@ -132,7 +132,7 @@ def update_cache(pokestop_type, type_info):
                                 'encounter_pokemon_id': stop.get('encounter_pokemon_id', None),
                                 'invasion_type': invasion_type
                             })
-                        print(f"📡 Debug: {location} ({pokestop_type}) - Character ID: {character_id}, Type: {invasion_type}, Dialogue: {grunt_dialogue[:100]}..., Remaining: {remaining_time/60:.1f} min")
+                        print(f"📡 Debug: {location} ({pokestop_type}) - Character ID: {character_id}, Type: {invasion_type}, Dialogue: {grunt_dialogue[:200]}..., Remaining: {remaining_time/60:.1f} min")
                     stops_by_location[location] = stops
                     print(f"✅ Fetched {len(stops_by_location[location])} {display_type} ({pokestop_type}) PokéStops for {location}")
                 except Exception as e:
@@ -162,7 +162,7 @@ HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html>
 <head>
-    <title>{{ pokestop_type.capitalize() }}-Type PokéStops</title>
+    <title>{{ type_info[pokestop_type]['display'] }} PokéStops</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="refresh" content="120">
     <style>
