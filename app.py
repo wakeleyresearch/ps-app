@@ -16,6 +16,8 @@ app = Flask(__name__)
 UPDATE_INTERVAL = 120
 # Minimum remaining time for PokéStops (seconds)
 MIN_REMAINING_TIME = 180
+# Maximum remaining time for PokéStops (seconds, to filter invalid data)
+MAX_REMAINING_TIME = 3200  # 60 minutes
 
 # Grunt type configuration (excluding giovanni, arlo, sierra, cliff, showcase, None gender)
 POKESTOP_TYPES = {
@@ -37,8 +39,10 @@ POKESTOP_TYPES = {
     'psychic': {'ids': [34, 35], 'gender': {35: 'Male', 34: 'Female'}, 'display': 'Psychic'},
     'rock': {'ids': [36, 37], 'gender': {37: 'Male', 36: 'Female'}, 'display': 'Rock'},
     'water': {'ids': [38, 39], 'gender': {39: 'Male', 38: 'Female'}, 'display': 'Water'},
+    'water-male': {'ids': [39], 'gender': {39: 'Male'}, 'display': 'Water (Male)'},
+    'water-female': {'ids': [38], 'gender': {38: 'Female'}, 'display': 'Water (Female)'},
     'electric': {'ids': [48, 49], 'gender': {49: 'Male', 48: 'Female'}, 'display': 'Electric'},
-    'ghost': {'ids': [47, 46], 'gender': {47: 'Male', 46: 'Female'}, 'display': 'Ghost'}  # Fixed IDs
+    'ghost': {'ids': [47, 46], 'gender': {47: 'Male', 46: 'Female'}, 'display': 'Ghost'}
 }
 
 # API endpoints (Sydney included)
@@ -104,36 +108,26 @@ def update_cache(pokestop_type, type_info):
                     for stop in data.get('invasions', []):
                         character_id = stop.get('character')
                         grunt_dialogue = stop.get('grunt_dialogue', '').lower()
-                        # Prioritize dialogue for electric type disambiguation
-                        is_electric = (
-                            character_id in character_ids and (
-                                pokestop_type == 'electric' and any(kw in grunt_dialogue for kw in ['shock', 'electric', 'volt', 'charge'])
-                                or pokestop_type != 'electric'
-                            )
-                        )
-                        is_grunt = (
-                            pokestop_type.startswith('grunt') and 'grunt' in grunt_dialogue
-                        )
-                        is_typed = (
-                            not pokestop_type.startswith('grunt') and
-                            pokestop_type.lower() in grunt_dialogue
-                        )
+                        invasion_type = stop.get('type')
+                        remaining_time = stop['invasion_end'] - (current_time - time_offset)
+                        # Filter for grunt invasions (type=1) and valid remaining time
                         if (
-                            (character_id in character_ids or is_grunt or is_typed or is_electric) and
-                            (stop['invasion_end'] - (current_time - time_offset)) > MIN_REMAINING_TIME
+                            invasion_type == 1 and  # Grunt invasions only
+                            character_id in character_ids and
+                            MIN_REMAINING_TIME < remaining_time <= MAX_REMAINING_TIME
                         ):
                             stops.append({
                                 'lat': stop['lat'],
                                 'lng': stop['lng'],
                                 'name': stop.get('name', f'Unnamed PokéStop ({location})'),
-                                'remaining_time': stop['invasion_end'] - (current_time - time_offset),
+                                'remaining_time': remaining_time,
                                 'character': character_id,
                                 'type': display_type,
                                 'gender': gender_map.get(character_id, 'Unknown'),
                                 'grunt_dialogue': grunt_dialogue,
                                 'encounter_pokemon_id': stop.get('encounter_pokemon_id', None)
                             })
-                        print(f"📡 Debug: {location} ({pokestop_type}) - Character ID: {character_id}, Dialogue: {grunt_dialogue[:50]}...")
+                        print(f"📡 Debug: {location} ({pokestop_type}) - Character ID: {character_id}, Type: {invasion_type}, Dialogue: {grunt_dialogue[:50]}..., Remaining: {remaining_time/60:.1f} min")
                     stops_by_location[location] = stops
                     print(f"✅ Fetched {len(stops_by_location[location])} {display_type} ({pokestop_type}) PokéStops for {location}")
                 except Exception as e:
@@ -181,10 +175,10 @@ HTML_TEMPLATE = """
 <body>
     <h1>{{ pokestop_type.capitalize() }}-Type PokéStops</h1>
     <p>Last updated: {{ last_updated }}</p>
-    <p>Updates every 2 minutes. Only PokéStops with more than 3 minutes remaining are shown.</p>
+    <p>Updates every 2 minutes. Only PokéStops with more than 3 minutes and less than 30 minutes remaining are shown.</p>
     <p>Switch type:
         {% for type in types %}
-            <a href="?type={{ type }}{% if debug %}&debug=true{% endif %}">{{ type.capitalize() }}</a>{% if not loop.last %}, {% endif %}
+            <a href="?type={{ type }}{% if debug %}&debug=true{% endif %}">{{ type_info[type]['display'] }}</a>{% if not loop.last %}, {% endif %}
         {% endfor %}
     </p>
     <p>
@@ -203,7 +197,7 @@ HTML_TEMPLATE = """
                 {% endfor %}
             </ul>
         {% else %}
-            <p class="no-stops">No {{ pokestop_type.capitalize() }}-type PokéStops found in {{ location }}.</p>
+            <p class="no-stops">No {{ type_info[pokestop_type]['display'] }}-type PokéStops found in {{ location }}.</p>
         {% endif %}
     {% endfor %}
 </body>
@@ -282,6 +276,7 @@ def get_pokestops():
             last_updated=data.get('last_updated', datetime.now().strftime('%Y-%m-%d %H:%M:%S')),
             pokestop_type=pokestop_type,
             types=POKESTOP_TYPES.keys(),
+            type_info=POKESTOP_TYPES,
             debug=debug
         )
     except Exception as e:
@@ -292,6 +287,7 @@ def get_pokestops():
             last_updated=datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             pokestop_type=pokestop_type,
             types=POKESTOP_TYPES.keys(),
+            type_info=POKESTOP_TYPES,
             debug=debug
         )
 
