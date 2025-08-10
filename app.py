@@ -17,7 +17,7 @@ UPDATE_INTERVAL = 120
 # Minimum remaining time for PokéStops (seconds)
 MIN_REMAINING_TIME = 180
 # Maximum remaining time for PokéStops (seconds, to filter invalid data)
-MAX_REMAINING_TIME = 1800  # 30 minutes
+MAX_REMAINING_TIME = 3600  # 60 minutes
 
 # Grunt type configuration (excluding giovanni, arlo, sierra, cliff, showcase, None gender)
 POKESTOP_TYPES = {
@@ -137,7 +137,7 @@ def update_cache(pokestop_type, type_info):
                     stops_by_location[location] = stops
                     print(f"✅ Fetched {len(stops_by_location[location])} {display_type} ({pokestop_type}) PokéStops for {location}")
                 except Exception as e:
-                    print(f"❌ Error fetching data for {location} ({pokestop_type}): {e}")
+                    print(f"❌ Error fetching data for {location} ({pokestop_type}: {e}")
                 time.sleep(2)
 
             try:
@@ -181,7 +181,7 @@ HTML_TEMPLATE = """
 <body>
     <h1>{{ type_info[pokestop_type]['display'] }} PokéStops</h1>
     <p>Last updated: {{ last_updated }}</p>
-    <p>Updates every 2 minutes. Only PokéStops with more than 3 minutes and less than 30 minutes remaining are shown.</p>
+    <p>Updates every 2 minutes. Only PokéStops with more than 3 minutes and less than 60 minutes remaining are shown.</p>
     {% if pokestop_type == 'ghost' and not any(stops.values()) %}
         <p class="no-stops">Note: Ghost-type grunts may be unavailable due to in-game events. Please check back later.</p>
     {% endif %}
