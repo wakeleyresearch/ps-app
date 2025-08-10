@@ -17,7 +17,7 @@ UPDATE_INTERVAL = 120
 # Minimum remaining time for PokéStops (seconds)
 MIN_REMAINING_TIME = 180
 # Maximum remaining time for PokéStops (seconds, to filter invalid data)
-MAX_REMAINING_TIME = 3600  # 60 minutes
+MAX_REMAINING_TIME = 1800  # 30 minutes
 
 # Grunt type configuration (excluding giovanni, arlo, sierra, cliff, showcase, None gender)
 POKESTOP_TYPES = {
@@ -51,7 +51,7 @@ API_ENDPOINTS = {
     'Vancouver': 'https://vanpokemap.com/pokestop.php',
     'Singapore': 'https://sgpokemap.com/pokestop.php',
     'London': 'https://londonpogomap.com/pokestop.php',
-    'Sydney': 'https://sydneypogemap.com/pokestop.php'
+    'Sydney': 'https://sydneypogomap.com/pokestop.php'
 }
 
 # Thread-safe set for active types
@@ -110,9 +110,11 @@ def update_cache(pokestop_type, type_info):
                         grunt_dialogue = stop.get('grunt_dialogue', '').lower()
                         invasion_type = stop.get('type')
                         remaining_time = stop['invasion_end'] - (current_time - time_offset)
-                        # Strict filtering for grunt invasions and character IDs
+                        # Log all invasions for debugging
+                        print(f"📡 Debug: {location} ({pokestop_type}) - Character ID: {character_id}, Type: {invasion_type}, Dialogue: {grunt_dialogue[:200]}..., Remaining: {remaining_time/60:.1f} min")
+                        # Filter for valid grunt invasions
                         is_valid = (
-                            invasion_type == 1 and  # Grunt invasions only
+                            (invasion_type == 1 or (pokestop_type == 'ghost' and invasion_type == 3)) and
                             character_id in character_ids and
                             MIN_REMAINING_TIME < remaining_time <= MAX_REMAINING_TIME
                         )
@@ -132,7 +134,6 @@ def update_cache(pokestop_type, type_info):
                                 'encounter_pokemon_id': stop.get('encounter_pokemon_id', None),
                                 'invasion_type': invasion_type
                             })
-                        print(f"📡 Debug: {location} ({pokestop_type}) - Character ID: {character_id}, Type: {invasion_type}, Dialogue: {grunt_dialogue[:200]}..., Remaining: {remaining_time/60:.1f} min")
                     stops_by_location[location] = stops
                     print(f"✅ Fetched {len(stops_by_location[location])} {display_type} ({pokestop_type}) PokéStops for {location}")
                 except Exception as e:
@@ -181,6 +182,9 @@ HTML_TEMPLATE = """
     <h1>{{ type_info[pokestop_type]['display'] }} PokéStops</h1>
     <p>Last updated: {{ last_updated }}</p>
     <p>Updates every 2 minutes. Only PokéStops with more than 3 minutes and less than 30 minutes remaining are shown.</p>
+    {% if pokestop_type == 'ghost' and not any(stops.values()) %}
+        <p class="no-stops">Note: Ghost-type grunts may be unavailable due to in-game events. Please check back later.</p>
+    {% endif %}
     <p>Switch type:
         {% for type in types %}
             <a href="?type={{ type }}{% if debug %}&debug=true{% endif %}">{{ type_info[type]['display'] }}</a>{% if not loop.last %}, {% endif %}
