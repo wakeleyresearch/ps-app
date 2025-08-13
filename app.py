@@ -107,7 +107,7 @@ def update_cache(pokestop_type, type_info):
                     stops = []
                     for stop in data.get('invasions', []):
                         character_id = stop.get('character')
-                        grunt_dialogue = stop.get('grunt_dialogue', '').lower()
+                        grunt_dialogue = stop.get('grunt_dialogue', '')
                         invasion_type = stop.get('type')
                         remaining_time = stop['invasion_end'] - (current_time - time_offset)
                         # Log all invasions for debugging
@@ -119,8 +119,8 @@ def update_cache(pokestop_type, type_info):
                             MIN_REMAINING_TIME < remaining_time <= MAX_REMAINING_TIME
                         )
                         # Additional validation for ghost type
-                        if pokestop_type == 'ghost' and is_valid:
-                            is_valid = 'ke...ke...ke' in grunt_dialogue
+                        if pokestop_type == 'ghost' and is_valid and grunt_dialogue:
+                            is_valid = 'ke...ke...ke' in grunt_dialogue.lower()
                         if is_valid:
                             stops.append({
                                 'lat': stop['lat'],
@@ -137,7 +137,7 @@ def update_cache(pokestop_type, type_info):
                     stops_by_location[location] = stops
                     print(f"✅ Fetched {len(stops_by_location[location])} {display_type} ({pokestop_type}) PokéStops for {location}")
                 except Exception as e:
-                    print(f"❌ Error fetching data for {location} ({pokestop_type}: {e}")
+                    print(f"❌ Error fetching data for {location} ({pokestop_type}): {e}")
                 time.sleep(2)
 
             try:
@@ -183,7 +183,7 @@ HTML_TEMPLATE = """
     <p>Last updated: {{ last_updated }}</p>
     <p>Updates every 2 minutes. Only PokéStops with more than 3 minutes and less than 60 minutes remaining are shown.</p>
     {% if pokestop_type == 'ghost' and not any(stops.values()) %}
-        <p class="no-stops">Note: Ghost-type grunts may be unavailable due to in-game events. Please check back later.</p>
+        <p class="no-stops">Note: Ghost-type grunts may be temporarily unavailable due to in-game events or API issues. Please try again later.</p>
     {% endif %}
     <p>Switch type:
         {% for type in types %}
