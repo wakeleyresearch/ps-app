@@ -16,6 +16,8 @@ app = Flask(__name__)
 UPDATE_INTERVAL = 120
 # Minimum remaining time for PokéStops (seconds)
 MIN_REMAINING_TIME = 180
+# Maximum remaining time for PokéStops (seconds, to filter invalid data)
+MAX_REMAINING_TIME = 3600  # 60 minutes
 
 # Grunt type configuration (excluding giovanni, arlo, sierra, cliff, showcase, None gender)
 POKESTOP_TYPES = {
@@ -37,8 +39,10 @@ POKESTOP_TYPES = {
     'psychic': {'ids': [34, 35], 'gender': {35: 'Male', 34: 'Female'}, 'display': 'Psychic'},
     'rock': {'ids': [36, 37], 'gender': {37: 'Male', 36: 'Female'}, 'display': 'Rock'},
     'water': {'ids': [38, 39], 'gender': {39: 'Male', 38: 'Female'}, 'display': 'Water'},
+    'water-male': {'ids': [39], 'gender': {39: 'Male'}, 'display': 'Water (Male)'},
+    'water-female': {'ids': [38], 'gender': {38: 'Female'}, 'display': 'Water (Female)'},
     'electric': {'ids': [48, 49], 'gender': {49: 'Male', 48: 'Female'}, 'display': 'Electric'},
-    'ghost': {'ids': [47, 46], 'gender': {47: 'Male', 46: 'Female'}, 'display': 'Ghost'}  # Fixed IDs
+    'ghost': {'ids': [47, 46], 'gender': {47: 'Male', 46: 'Female'}, 'display': 'Ghost'}
 }
 
 # API endpoints (Sydney included)
@@ -102,38 +106,38 @@ def update_cache(pokestop_type, type_info):
 
                     stops = []
                     for stop in data.get('invasions', []):
-                        character_id = stop.get('character')
-                        grunt_dialogue = stop.get('grunt_dialogue', '').lower()
-                        # Prioritize dialogue for electric type disambiguation
-                        is_electric = (
-                            character_id in character_ids and (
-                                pokestop_type == 'electric' and any(kw in grunt_dialogue for kw in ['shock', 'electric', 'volt', 'charge'])
-                                or pokestop_type != 'electric'
+                        try:
+                            character_id = stop.get('character')
+                            grunt_dialogue = stop.get('grunt_dialogue', '')
+                            invasion_type = stop.get('type')
+                            remaining_time = stop['invasion_end'] - (current_time - time_offset)
+                            # Log all invasions for debugging
+                            print(f"📡 Debug: {location} ({pokestop_type}) - Character ID: {character_id}, Type: {invasion_type}, Dialogue: {grunt_dialogue[:200]}..., Remaining: {remaining_time/60:.1f} min")
+                            # Filter for valid grunt invasions
+                            is_valid = (
+                                character_id in character_ids and
+                                (invasion_type == 1 or (pokestop_type == 'ghost' and invasion_type == 3)) and
+                                MIN_REMAINING_TIME < remaining_time <= MAX_REMAINING_TIME
                             )
-                        )
-                        is_grunt = (
-                            pokestop_type.startswith('grunt') and 'grunt' in grunt_dialogue
-                        )
-                        is_typed = (
-                            not pokestop_type.startswith('grunt') and
-                            pokestop_type.lower() in grunt_dialogue
-                        )
-                        if (
-                            (character_id in character_ids or is_grunt or is_typed or is_electric) and
-                            (stop['invasion_end'] - (current_time - time_offset)) > MIN_REMAINING_TIME
-                        ):
-                            stops.append({
-                                'lat': stop['lat'],
-                                'lng': stop['lng'],
-                                'name': stop.get('name', f'Unnamed PokéStop ({location})'),
-                                'remaining_time': stop['invasion_end'] - (current_time - time_offset),
-                                'character': character_id,
-                                'type': display_type,
-                                'gender': gender_map.get(character_id, 'Unknown'),
-                                'grunt_dialogue': grunt_dialogue,
-                                'encounter_pokemon_id': stop.get('encounter_pokemon_id', None)
-                            })
-                        print(f"📡 Debug: {location} ({pokestop_type}) - Character ID: {character_id}, Dialogue: {grunt_dialogue[:50]}...")
+                            # Additional validation for ghost type
+                            if pokestop_type == 'ghost' and is_valid and grunt_dialogue:
+                                is_valid = 'ke...ke...ke' in grunt_dialogue.lower()
+                            if is_valid:
+                                stops.append({
+                                    'lat': stop.get('lat'),
+                                    'lng': stop.get('lng'),
+                                    'name': stop.get('name', f'Unnamed PokéStop ({location})'),
+                                    'remaining_time': remaining_time,
+                                    'character': character_id,
+                                    'type': display_type,
+                                    'gender': gender_map.get(character_id, 'Unknown'),
+                                    'grunt_dialogue': grunt_dialogue,
+                                    'encounter_pokemon_id': stop.get('encounter_pokemon_id', None),
+                                    'invasion_type': invasion_type
+                                })
+                        except Exception as e:
+                            print(f"⚠️ Error processing stop in {location} ({pokestop_type}): {e}")
+                            continue
                     stops_by_location[location] = stops
                     print(f"✅ Fetched {len(stops_by_location[location])} {display_type} ({pokestop_type}) PokéStops for {location}")
                 except Exception as e:
@@ -163,7 +167,7 @@ HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html>
 <head>
-    <title>{{ pokestop_type.capitalize() }}-Type PokéStops</title>
+    <title>{{ type_info[pokestop_type]['display'] }} PokéStops</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="refresh" content="120">
     <style>
@@ -179,12 +183,15 @@ HTML_TEMPLATE = """
     </style>
 </head>
 <body>
-    <h1>{{ pokestop_type.capitalize() }}-Type PokéStops</h1>
+    <h1>{{ type_info[pokestop_type]['display'] }} PokéStops</h1>
     <p>Last updated: {{ last_updated }}</p>
-    <p>Updates every 2 minutes. Only PokéStops with more than 3 minutes remaining are shown.</p>
+    <p>Updates every 2 minutes. Only PokéStops with more than 3 minutes and less than 60 minutes remaining are shown.</p>
+    {% if pokestop_type == 'ghost' and not any(stops.values()) %}
+        <p class="no-stops">Note: Ghost-type grunts may be temporarily unavailable due to in-game events or API issues. Please try again later or check Pokémon GO for active grunts.</p>
+    {% endif %}
     <p>Switch type:
         {% for type in types %}
-            <a href="?type={{ type }}{% if debug %}&debug=true{% endif %}">{{ type.capitalize() }}</a>{% if not loop.last %}, {% endif %}
+            <a href="?type={{ type }}{% if debug %}&debug=true{% endif %}">{{ type_info[type]['display'] }}</a>{% if not loop.last %}, {% endif %}
         {% endfor %}
     </p>
     <p>
@@ -197,13 +204,13 @@ HTML_TEMPLATE = """
                 {% for stop in stops %}
                     <li>{{ stop.type }} ({{ stop.gender }}) {{ stop.name }} (<a href="https://maps.google.com/?q={{ stop.lat }},{{ stop.lng }}">{{ stop.lat }}, {{ stop.lng }}</a>) - {{ stop.remaining_time // 60 }} min {{ stop.remaining_time % 60 }} sec remaining
                         {% if debug %}
-                            <span class="debug">(Character: {{ stop.character }}, Dialogue: {{ stop.grunt_dialogue|default('N/A') }}, Encounter ID: {{ stop.encounter_pokemon_id|default('N/A') }})</span>
+                            <span class="debug">(Character: {{ stop.character }}, Type: {{ stop.invasion_type }}, Dialogue: {{ stop.grunt_dialogue|default('N/A') }}, Encounter ID: {{ stop.encounter_pokemon_id|default('N/A') }})</span>
                         {% endif %}
                     </li>
                 {% endfor %}
             </ul>
         {% else %}
-            <p class="no-stops">No {{ pokestop_type.capitalize() }}-type PokéStops found in {{ location }}.</p>
+            <p class="no-stops">No {{ type_info[pokestop_type]['display'] }}-type PokéStops found in {{ location }}.</p>
         {% endif %}
     {% endfor %}
 </body>
@@ -222,33 +229,38 @@ def download_gpx():
     try:
         with open(cache_file, 'r') as f:
             data = json.load(f)
+        print(f"📖 Debug: Loaded cache for {pokestop_type} from {cache_file}")
     except Exception as e:
         print(f"⚠️ Error reading cache for {pokestop_type}: {e}")
         data = {'stops': {location: [] for location in API_ENDPOINTS.keys()}, 'last_updated': 'Unknown'}
     
-    # Filter stops with remaining_time > 600 seconds (10 minutes)
-    filtered_stops = []
-    for location, stops in data['stops'].items():
-        for stop in stops:
-            if stop['remaining_time'] > 600:
-                filtered_stops.append(stop)
-    
-    # Generate GPX
-    gpx = ET.Element('gpx', version="1.1", creator="Wakestops App")
-    for stop in filtered_stops:
-        wpt = ET.SubElement(gpx, 'wpt', lat=str(stop['lat']), lon=str(stop['lng']))
-        name = ET.SubElement(wpt, 'name')
-        name.text = stop['name']
-    
-    gpx_str = ET.tostring(gpx, encoding='unicode')
-    
-    # Return as downloadable file
-    return send_file(
-        BytesIO(gpx_str.encode()),
-        mimetype='application/gpx+xml',
-        as_attachment=True,
-        download_name='pokestops.gpx'
-    )
+    try:
+        # Filter stops with remaining_time > 600 seconds (10 minutes)
+        filtered_stops = []
+        for location, stops in data['stops'].items():
+            for stop in stops:
+                if stop['remaining_time'] > 600:
+                    filtered_stops.append(stop)
+        
+        # Generate GPX
+        gpx = ET.Element('gpx', version="1.1", creator="Wakestops App")
+        for stop in filtered_stops:
+            wpt = ET.SubElement(gpx, 'wpt', lat=str(stop['lat']), lon=str(stop['lng']))
+            name = ET.SubElement(wpt, 'name')
+            name.text = stop['name']
+        
+        gpx_str = ET.tostring(gpx, encoding='unicode')
+        
+        # Return as downloadable file
+        return send_file(
+            BytesIO(gpx_str.encode()),
+            mimetype='application/gpx+xml',
+            as_attachment=True,
+            download_name='pokestops.gpx'
+        )
+    except Exception as e:
+        print(f"❌ Error generating GPX for {pokestop_type}: {e}")
+        return "Error generating GPX file", 500
 
 @app.route('/')
 def get_pokestops():
@@ -282,18 +294,12 @@ def get_pokestops():
             last_updated=data.get('last_updated', datetime.now().strftime('%Y-%m-%d %H:%M:%S')),
             pokestop_type=pokestop_type,
             types=POKESTOP_TYPES.keys(),
+            type_info=POKESTOP_TYPES,
             debug=debug
         )
     except Exception as e:
         print(f"❌ Render failed for {pokestop_type}: {e}")
-        return render_template_string(
-            HTML_TEMPLATE,
-            stops={location: [] for location in API_ENDPOINTS.keys()},
-            last_updated=datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            pokestop_type=pokestop_type,
-            types=POKESTOP_TYPES.keys(),
-            debug=debug
-        )
+        return "Internal Server Error: Failed to render page", 500
 
 if __name__ == '__main__':
     import os
