@@ -16,24 +16,8 @@ app = Flask(__name__)
 UPDATE_INTERVAL = 120
 # Minimum remaining time for PokéStops (seconds)
 MIN_REMAINING_TIME = 180
-# Maximum remaining time for PokéStops (seconds, to filter invalid data)from flask import Flask, render_template_string, request, send_file
-from io import BytesIO
-import xml.etree.ElementTree as ET
-import requests
-from datetime import datetime
-import time
-import threading
-import json
-import os
-import psutil
-from threading import Lock
-
-app = Flask(__name__)
-
-# Cache update interval (seconds)
-UPDATE_INTERVAL = 120
-# Minimum remaining time for PokéStops (seconds)
-MIN_REMAINING_TIME = 180
+# Maximum remaining time for PokéStops (seconds, to filter invalid data)
+MAX_REMAINING_TIME = 7200
 
 # Grunt type configuration (excluding giovanni, arlo, sierra, cliff, showcase, None gender)
 POKESTOP_TYPES = {
@@ -136,15 +120,16 @@ def update_cache(pokestop_type, type_info):
                             not pokestop_type.startswith('grunt') and
                             pokestop_type.lower() in grunt_dialogue
                         )
+                        remaining_time = stop['invasion_end'] - (current_time - time_offset)
                         if (
                             (character_id in character_ids or is_grunt or is_typed or is_electric) and
-                            (stop['invasion_end'] - (current_time - time_offset)) > MIN_REMAINING_TIME
+                            MIN_REMAINING_TIME < remaining_time < MAX_REMAINING_TIME
                         ):
                             stops.append({
                                 'lat': stop['lat'],
                                 'lng': stop['lng'],
                                 'name': stop.get('name', f'Unnamed PokéStop ({location})'),
-                                'remaining_time': stop['invasion_end'] - (current_time - time_offset),
+                                'remaining_time': remaining_time,
                                 'character': character_id,
                                 'type': display_type,
                                 'gender': gender_map.get(character_id, 'Unknown'),
