@@ -16,24 +16,8 @@ app = Flask(__name__)
 UPDATE_INTERVAL = 120
 # Minimum remaining time for PokéStops (seconds)
 MIN_REMAINING_TIME = 180
-# Maximum remaining time for PokéStops (seconds, to filter invalid data)from flask import Flask, render_template_string, request, send_file
-from io import BytesIO
-import xml.etree.ElementTree as ET
-import requests
-from datetime import datetime
-import time
-import threading
-import json
-import os
-import psutil
-from threading import Lock
-
-app = Flask(__name__)
-
-# Cache update interval (seconds)
-UPDATE_INTERVAL = 120
-# Minimum remaining time for PokéStops (seconds)
-MIN_REMAINING_TIME = 180
+# Maximum remaining time for PokéStops (seconds, to filter invalid data)
+MAX_REMAINING_TIME = 7200
 
 # Grunt type configuration (excluding giovanni, arlo, sierra, cliff, showcase, None gender)
 POKESTOP_TYPES = {
@@ -56,7 +40,7 @@ POKESTOP_TYPES = {
     'rock': {'ids': [36, 37], 'gender': {37: 'Male', 36: 'Female'}, 'display': 'Rock'},
     'water': {'ids': [38, 39], 'gender': {39: 'Male', 38: 'Female'}, 'display': 'Water'},
     'electric': {'ids': [48, 49], 'gender': {49: 'Male', 48: 'Female'}, 'display': 'Electric'},
-    'ghost': {'ids': [47, 46], 'gender': {47: 'Male', 46: 'Female'}, 'display': 'Ghost'}  # Fixed IDs
+    'ghost': {'ids': [47, 48], 'gender': {47: 'Male', 48: 'Female'}, 'display': 'Ghost'}  # Fixed IDs
 }
 
 # API endpoints (Sydney included)
@@ -122,6 +106,9 @@ def update_cache(pokestop_type, type_info):
                     for stop in data.get('invasions', []):
                         character_id = stop.get('character')
                         grunt_dialogue = stop.get('grunt_dialogue', '').lower()
+                        # Debug logging for Ghost-type PokéStops
+                        if character_id in [47, 48]:
+                            print(f"👻 Ghost Debug: Location={location}, Character ID={character_id}, Dialogue={grunt_dialogue[:50]}, Remaining={stop['invasion_end'] - (current_time - time_offset)}s")
                         # Prioritize dialogue for electric type disambiguation
                         is_electric = (
                             character_id in character_ids and (
@@ -134,17 +121,21 @@ def update_cache(pokestop_type, type_info):
                         )
                         is_typed = (
                             not pokestop_type.startswith('grunt') and
-                            pokestop_type.lower() in grunt_dialogue
+                            (
+                                pokestop_type.lower() in grunt_dialogue or
+                                (pokestop_type == 'ghost' and 'ke...ke...' in grunt_dialogue)
+                            )
                         )
+                        remaining_time = stop['invasion_end'] - (current_time - time_offset)
                         if (
                             (character_id in character_ids or is_grunt or is_typed or is_electric) and
-                            (stop['invasion_end'] - (current_time - time_offset)) > MIN_REMAINING_TIME
+                            MIN_REMAINING_TIME < remaining_time < MAX_REMAINING_TIME
                         ):
                             stops.append({
                                 'lat': stop['lat'],
                                 'lng': stop['lng'],
                                 'name': stop.get('name', f'Unnamed PokéStop ({location})'),
-                                'remaining_time': stop['invasion_end'] - (current_time - time_offset),
+                                'remaining_time': remaining_time,
                                 'character': character_id,
                                 'type': display_type,
                                 'gender': gender_map.get(character_id, 'Unknown'),
@@ -267,6 +258,18 @@ def download_gpx():
         as_attachment=True,
         download_name='pokestops.gpx'
     )
+
+# Temporary debug endpoint to inspect raw API data
+@app.route('/debug_api')
+def debug_api():
+    location = request.args.get('location', 'London')
+    url = API_ENDPOINTS.get(location, API_ENDPOINTS['London'])
+    try:
+        response = requests.get(url, params={'time': int(time.time() * 1000)}, timeout=10)
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        return {'error': str(e)}
 
 @app.route('/')
 def get_pokestops():
