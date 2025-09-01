@@ -186,6 +186,74 @@ HTML_TEMPLATE = """
         .no-stops { color: #888; }
         .debug { font-size: 0.9em; color: #666; }
     </style>
+    <script>
+        var stopsData = {
+            {% for location in stops.keys() %}
+            '{{ location }}': {{ stops[location] | tojson }},
+            {% endfor %}
+        };
+        var isDebug = {{ debug | tojson }};
+        var sortMode = {};
+        
+        function distance(a, b) {
+            const R = 6371; // Earth radius in km
+            const dLat = (b.lat - a.lat) * Math.PI / 180;
+            const dLon = (b.lng - a.lng) * Math.PI / 180;
+            const lat1 = a.lat * Math.PI / 180;
+            const lat2 = b.lat * Math.PI / 180;
+            const x = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.sin(dLon / 2) * Math.sin(dLon / 2) * Math.cos(lat1) * Math.cos(lat2);
+            const c = 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+            return R * c;
+        }
+        
+        function nearestNeighbor(points) {
+            if (points.length <= 1) return points;
+            // Sort by remaining_time descending to choose starting point
+            points.sort((a, b) => b.remaining_time - a.remaining_time);
+            let ordered = [points.shift()]; // Start with the one having the most time remaining
+            while (points.length > 0) {
+                let last = ordered[ordered.length - 1];
+                let minDist = Infinity;
+                let closestIdx = -1;
+                for (let i = 0; i < points.length; i++) {
+                    let dist = distance(last, points[i]);
+                    if (dist < minDist) {
+                        minDist = dist;
+                        closestIdx = i;
+                    }
+                }
+                ordered.push(points.splice(closestIdx, 1)[0]);
+            }
+            return ordered;
+        }
+        
+        function renderStops(location, stops) {
+            let ul = document.getElementById('stops-list-' + location);
+            ul.innerHTML = '';
+            stops.forEach(stop => {
+                let li = document.createElement('li');
+                let html = `${stop.type} (${stop.gender}) ${stop.name} (<a href="https://maps.google.com/?q=${stop.lat},${stop.lng}">${stop.lat}, ${stop.lng}</a>) - ${Math.floor(stop.remaining_time / 60)} min ${stop.remaining_time % 60} sec remaining`;
+                if (isDebug) {
+                    html += `<span class="debug">(Character: ${stop.character}, Dialogue: ${stop.grunt_dialogue || 'N/A'}, Encounter ID: ${stop.encounter_pokemon_id || 'N/A'})</span>`;
+                }
+                li.innerHTML = html;
+                ul.appendChild(li);
+            });
+        }
+        
+        function toggleSort(location) {
+            sortMode[location] = sortMode[location] === 'nearest' ? 'time' : 'nearest';
+            let button = document.getElementById('sort-btn-' + location);
+            button.textContent = sortMode[location] === 'nearest' ? 'Sort by Time Remaining' : 'Sort by Nearest Neighbor';
+            let stops = [...stopsData[location]];
+            if (sortMode[location] === 'nearest') {
+                stops = nearestNeighbor(stops);
+            } else {
+                stops.sort((a, b) => b.remaining_time - a.remaining_time);
+            }
+            renderStops(location, stops);
+        }
+    </script>
 </head>
 <body>
     <h1>{{ pokestop_type.capitalize() }}-Type PokéStops</h1>
@@ -199,11 +267,12 @@ HTML_TEMPLATE = """
     <p>
         <a href="/download_gpx?type={{ pokestop_type }}" target="_blank">Download GPX (over 10 min remaining)</a>
     </p>
-    {% for location, stops in stops.items() %}
+    {% for location, location_stops in stops.items() %}
         <h2>{{ location }}</h2>
-        {% if stops %}
-            <ul>
-                {% for stop in stops %}
+        <button id="sort-btn-{{ location }}" onclick="toggleSort('{{ location }}')">Sort by Nearest Neighbor</button>
+        {% if location_stops %}
+            <ul id="stops-list-{{ location }}">
+                {% for stop in location_stops %}
                     <li>{{ stop.type }} ({{ stop.gender }}) {{ stop.name }} (<a href="https://maps.google.com/?q={{ stop.lat }},{{ stop.lng }}">{{ stop.lat }}, {{ stop.lng }}</a>) - {{ stop.remaining_time // 60 }} min {{ stop.remaining_time % 60 }} sec remaining
                         {% if debug %}
                             <span class="debug">(Character: {{ stop.character }}, Dialogue: {{ stop.grunt_dialogue|default('N/A') }}, Encounter ID: {{ stop.encounter_pokemon_id|default('N/A') }})</span>
@@ -296,10 +365,15 @@ def get_pokestops():
         print(f"⚠️ Error reading cache for {pokestop_type}: {e}")
         data = {'stops': {location: [] for location in API_ENDPOINTS.keys()}, 'last_updated': 'Unknown'}
 
+    # Sort stops by remaining_time descending (default sort)
+    stops = data.get('stops', {location: [] for location in API_ENDPOINTS.keys()})
+    for location in stops:
+        stops[location] = sorted(stops[location], key=lambda s: s['remaining_time'], reverse=True)
+
     try:
         return render_template_string(
             HTML_TEMPLATE,
-            stops=data.get('stops', {location: [] for location in API_ENDPOINTS.keys()}),
+            stops=stops,
             last_updated=data.get('last_updated', datetime.now().strftime('%Y-%m-%d %H:%M:%S')),
             pokestop_type=pokestop_type,
             types=POKESTOP_TYPES.keys(),
