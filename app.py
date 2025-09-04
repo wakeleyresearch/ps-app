@@ -15,7 +15,7 @@ from markupsafe import escape
 
 # Import our modules
 from config import config, POKESTOP_TYPES, API_ENDPOINTS
-from cache_manager import CacheManager
+from cache_manager import cache_manager
 from scraper import PokeStopScraper, ParallelDataFetcher
 
 # Configure logging
@@ -42,7 +42,6 @@ limiter = Limiter(
 )
 
 # Global managers
-cache_manager = CacheManager()
 active_types: Set[str] = set(['fairy'])
 active_types_lock = threading.Lock()
 
