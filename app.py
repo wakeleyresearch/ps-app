@@ -41,36 +41,10 @@ limiter = Limiter(
     storage_uri="memory://"
 )
 
-<<<<<<< HEAD
 # Global managers
 cache_manager = CacheManager()
 active_types: Set[str] = set(['fairy'])
 active_types_lock = threading.Lock()
-=======
-# Grunt type configuration (excluding giovanni, arlo, sierra, cliff, showcase, None gender)
-POKESTOP_TYPES = {
-    'gruntmale': {'ids': [4], 'gender': {4: 'Male'}, 'display': 'Grunt'},
-    'gruntfemale': {'ids': [5], 'gender': {5: 'Female'}, 'display': 'Grunt'},
-    'bug': {'ids': [6, 7], 'gender': {7: 'Male', 6: 'Female'}, 'display': 'Bug'},
-    'dark': {'ids': [10, 11], 'gender': {11: 'Male', 10: 'Female'}, 'display': 'Dark'},
-    'dragon': {'ids': [12, 13], 'gender': {13: 'Male', 12: 'Female'}, 'display': 'Dragon'},
-    'fairy': {'ids': [14, 15], 'gender': {15: 'Male', 14: 'Female'}, 'display': 'Fairy'},
-    'fighting': {'ids': [16, 17], 'gender': {17: 'Male', 16: 'Female'}, 'display': 'Fighting'},
-    'fire': {'ids': [18, 19], 'gender': {19: 'Male', 18: 'Female'}, 'display': 'Fire'},
-    'flying': {'ids': [20, 21], 'gender': {21: 'Male', 20: 'Female'}, 'display': 'Flying'},
-    'grass': {'ids': [22, 23], 'gender': {23: 'Male', 22: 'Female'}, 'display': 'Grass'},
-    'ground': {'ids': [24, 25], 'gender': {25: 'Male', 24: 'Female'}, 'display': 'Ground'},
-    'ice': {'ids': [26, 27], 'gender': {27: 'Male', 26: 'Female'}, 'display': 'Ice'},
-    'metal': {'ids': [28, 29], 'gender': {29: 'Male', 28: 'Female'}, 'display': 'Metal'},
-    'normal': {'ids': [30, 31], 'gender': {31: 'Male', 30: 'Female'}, 'display': 'Normal'},
-    'poison': {'ids': [32, 33], 'gender': {33: 'Male', 32: 'Female'}, 'display': 'Poison'},
-    'psychic': {'ids': [34, 35], 'gender': {35: 'Male', 34: 'Female'}, 'display': 'Psychic'},
-    'rock': {'ids': [36, 37], 'gender': {37: 'Male', 36: 'Female'}, 'display': 'Rock'},
-    'water': {'ids': [38, 39], 'gender': {39: 'Male', 38: 'Female'}, 'display': 'Water'},
-    'electric': {'ids': [48, 49], 'gender': {49: 'Male', 48: 'Female'}, 'display': 'Electric'},
-    'ghost': {'ids': [47, 48], 'gender': {47: 'Male', 48: 'Female'}, 'display': 'Ghost'}  # Fixed IDs
-}
->>>>>>> c83356af48a49be32908cbedda16596e6237e4f3
 
 class TypeManager:
     """Utility class to manage pokestop types and their relationships."""
@@ -135,7 +109,6 @@ def update_cache_worker(pokestop_type: str, type_info: Dict):
     
     while True:
         try:
-<<<<<<< HEAD
             logger.info(f"Starting cache update for {pokestop_type}")
             
             # Fetch data from all locations
@@ -155,78 +128,6 @@ def update_cache_worker(pokestop_type: str, type_info: Dict):
             else:
                 logger.error(f"❌ Failed to write cache for {pokestop_type}")
                 
-=======
-            stops_by_location = {location: [] for location in API_ENDPOINTS.keys()}
-            current_time = time.time()
-
-            for location, url in API_ENDPOINTS.items():
-                try:
-                    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0'}
-                    params = {'time': int(current_time * 1000)}
-                    response = requests.get(url, params=params, headers=headers, timeout=10, proxies=proxies)
-                    response.raise_for_status()
-                    data = response.json()
-                    meta = data.get('meta', {})
-                    time_offset = current_time - int(meta.get('time', current_time))
-
-                    stops = []
-                    for stop in data.get('invasions', []):
-                        character_id = stop.get('character')
-                        grunt_dialogue = stop.get('grunt_dialogue', '').lower()
-                        # Debug logging for Ghost-type PokéStops
-                        if character_id in [47, 48]:
-                            print(f"👻 Ghost Debug: Location={location}, Character ID={character_id}, Dialogue={grunt_dialogue[:50]}, Remaining={stop['invasion_end'] - (current_time - time_offset)}s")
-                        # Prioritize dialogue for electric type disambiguation
-                        is_electric = (
-                            character_id in character_ids and (
-                                pokestop_type == 'electric' and any(kw in grunt_dialogue for kw in ['shock', 'electric', 'volt', 'charge'])
-                                or pokestop_type != 'electric'
-                            )
-                        )
-                        is_grunt = (
-                            pokestop_type.startswith('grunt') and 'grunt' in grunt_dialogue
-                        )
-                        is_typed = (
-                            not pokestop_type.startswith('grunt') and
-                            (
-                                pokestop_type.lower() in grunt_dialogue or
-                                (pokestop_type == 'ghost' and 'ke...ke...' in grunt_dialogue)
-                            )
-                        )
-                        remaining_time = stop['invasion_end'] - (current_time - time_offset)
-                        if (
-                            (character_id in character_ids or is_grunt or is_typed or is_electric) and
-                            MIN_REMAINING_TIME < remaining_time < MAX_REMAINING_TIME
-                        ):
-                            stops.append({
-                                'lat': stop['lat'],
-                                'lng': stop['lng'],
-                                'name': stop.get('name', f'Unnamed PokéStop ({location})'),
-                                'remaining_time': remaining_time,
-                                'character': character_id,
-                                'type': display_type,
-                                'gender': gender_map.get(character_id, 'Unknown'),
-                                'grunt_dialogue': grunt_dialogue,
-                                'encounter_pokemon_id': stop.get('encounter_pokemon_id', None)
-                            })
-                        print(f"📡 Debug: {location} ({pokestop_type}) - Character ID: {character_id}, Dialogue: {grunt_dialogue[:50]}...")
-                    stops_by_location[location] = stops
-                    print(f"✅ Fetched {len(stops_by_location[location])} {display_type} ({pokestop_type}) PokéStops for {location}")
-                except Exception as e:
-                    print(f"❌ Error fetching data for {location} ({pokestop_type}): {e}")
-                time.sleep(2)
-
-            try:
-                os.makedirs(os.path.dirname(cache_file), exist_ok=True)
-                with open(cache_file, 'w') as f:
-                    json.dump({
-                        'stops': stops_by_location,
-                        'last_updated': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                    }, f)
-                print(f"✅ Cache updated for {pokestop_type} at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-            except Exception as e:
-                print(f"⚠️ Error writing cache for {pokestop_type}: {e}")
->>>>>>> c83356af48a49be32908cbedda16596e6237e4f3
         except Exception as e:
             logger.error(f"❌ Error updating cache for {pokestop_type}: {e}")
         
@@ -528,77 +429,8 @@ HTML_TEMPLATE = """
             .stop-item { padding: 12px 15px; }
         }
     </style>
-    <script>
-        var stopsData = {
-            {% for location in stops.keys() %}
-            '{{ location }}': {{ stops[location] | tojson }},
-            {% endfor %}
-        };
-        var isDebug = {{ debug | tojson }};
-        var sortMode = {};
-        
-        function distance(a, b) {
-            const R = 6371; // Earth radius in km
-            const dLat = (b.lat - a.lat) * Math.PI / 180;
-            const dLon = (b.lng - a.lng) * Math.PI / 180;
-            const lat1 = a.lat * Math.PI / 180;
-            const lat2 = b.lat * Math.PI / 180;
-            const x = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.sin(dLon / 2) * Math.sin(dLon / 2) * Math.cos(lat1) * Math.cos(lat2);
-            const c = 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
-            return R * c;
-        }
-        
-        function nearestNeighbor(points) {
-            if (points.length <= 1) return points;
-            // Sort by remaining_time descending to choose starting point
-            points.sort((a, b) => b.remaining_time - a.remaining_time);
-            let ordered = [points.shift()]; // Start with the one having the most time remaining
-            while (points.length > 0) {
-                let last = ordered[ordered.length - 1];
-                let minDist = Infinity;
-                let closestIdx = -1;
-                for (let i = 0; i < points.length; i++) {
-                    let dist = distance(last, points[i]);
-                    if (dist < minDist) {
-                        minDist = dist;
-                        closestIdx = i;
-                    }
-                }
-                ordered.push(points.splice(closestIdx, 1)[0]);
-            }
-            return ordered;
-        }
-        
-        function renderStops(location, stops) {
-            let ul = document.getElementById('stops-list-' + location);
-            ul.innerHTML = '';
-            stops.forEach(stop => {
-                let li = document.createElement('li');
-                let html = `${stop.type} (${stop.gender}) ${stop.name} (<a href="https://maps.google.com/?q=${stop.lat},${stop.lng}">${stop.lat}, ${stop.lng}</a>) - ${Math.floor(stop.remaining_time / 60)} min ${stop.remaining_time % 60} sec remaining`;
-                if (isDebug) {
-                    html += `<span class="debug">(Character: ${stop.character}, Dialogue: ${stop.grunt_dialogue || 'N/A'}, Encounter ID: ${stop.encounter_pokemon_id || 'N/A'})</span>`;
-                }
-                li.innerHTML = html;
-                ul.appendChild(li);
-            });
-        }
-        
-        function toggleSort(location) {
-            sortMode[location] = sortMode[location] === 'nearest' ? 'time' : 'nearest';
-            let button = document.getElementById('sort-btn-' + location);
-            button.textContent = sortMode[location] === 'nearest' ? 'Sort by Time Remaining' : 'Sort by Nearest Neighbor';
-            let stops = [...stopsData[location]];
-            if (sortMode[location] === 'nearest') {
-                stops = nearestNeighbor(stops);
-            } else {
-                stops.sort((a, b) => b.remaining_time - a.remaining_time);
-            }
-            renderStops(location, stops);
-        }
-    </script>
 </head>
 <body>
-<<<<<<< HEAD
     <div class="container">
         <h1>{{ display_name }} PokéStops</h1>
         
@@ -622,30 +454,6 @@ HTML_TEMPLATE = """
                         {{ 'Male' if 'male' in type_name else 'Female' }}
                     </span>
                 </a>
-=======
-    <h1>{{ pokestop_type.capitalize() }}-Type PokéStops</h1>
-    <p>Last updated: {{ last_updated }}</p>
-    <p>Updates every 2 minutes. Only PokéStops with more than 3 minutes remaining are shown.</p>
-    <p>Switch type:
-        {% for type in types %}
-            <a href="?type={{ type }}{% if debug %}&debug=true{% endif %}">{{ type.capitalize() }}</a>{% if not loop.last %}, {% endif %}
-        {% endfor %}
-    </p>
-    <p>
-        <a href="/download_gpx?type={{ pokestop_type }}" target="_blank">Download GPX (over 10 min remaining)</a>
-    </p>
-    {% for location, location_stops in stops.items() %}
-        <h2>{{ location }}</h2>
-        <button id="sort-btn-{{ location }}" onclick="toggleSort('{{ location }}')">Sort by Nearest Neighbor</button>
-        {% if location_stops %}
-            <ul id="stops-list-{{ location }}">
-                {% for stop in location_stops %}
-                    <li>{{ stop.type }} ({{ stop.gender }}) {{ stop.name }} (<a href="https://maps.google.com/?q={{ stop.lat }},{{ stop.lng }}">{{ stop.lat }}, {{ stop.lng }}</a>) - {{ stop.remaining_time // 60 }} min {{ stop.remaining_time % 60 }} sec remaining
-                        {% if debug %}
-                            <span class="debug">(Character: {{ stop.character }}, Dialogue: {{ stop.grunt_dialogue|default('N/A') }}, Encounter ID: {{ stop.encounter_pokemon_id|default('N/A') }})</span>
-                        {% endif %}
-                    </li>
->>>>>>> c83356af48a49be32908cbedda16596e6237e4f3
                 {% endfor %}
             </div>
             
@@ -907,62 +715,7 @@ HTML_TEMPLATE = """
 </html>
 """
 
-<<<<<<< HEAD
 # Routes
-=======
-# Route for downloading GPX
-@app.route('/download_gpx')
-def download_gpx():
-    pokestop_type = request.args.get('type', 'fairy').lower()
-    debug = request.args.get('debug', 'false').lower() == 'true'
-    if pokestop_type not in POKESTOP_TYPES:
-        pokestop_type = 'fairy'
-    cache_file = get_cache_file(pokestop_type)
-    
-    try:
-        with open(cache_file, 'r') as f:
-            data = json.load(f)
-    except Exception as e:
-        print(f"⚠️ Error reading cache for {pokestop_type}: {e}")
-        data = {'stops': {location: [] for location in API_ENDPOINTS.keys()}, 'last_updated': 'Unknown'}
-    
-    # Filter stops with remaining_time > 600 seconds (10 minutes)
-    filtered_stops = []
-    for location, stops in data['stops'].items():
-        for stop in stops:
-            if stop['remaining_time'] > 600:
-                filtered_stops.append(stop)
-    
-    # Generate GPX
-    gpx = ET.Element('gpx', version="1.1", creator="Wakestops App")
-    for stop in filtered_stops:
-        wpt = ET.SubElement(gpx, 'wpt', lat=str(stop['lat']), lon=str(stop['lng']))
-        name = ET.SubElement(wpt, 'name')
-        name.text = stop['name']
-    
-    gpx_str = ET.tostring(gpx, encoding='unicode')
-    
-    # Return as downloadable file
-    return send_file(
-        BytesIO(gpx_str.encode()),
-        mimetype='application/gpx+xml',
-        as_attachment=True,
-        download_name='pokestops.gpx'
-    )
-
-# Temporary debug endpoint to inspect raw API data
-@app.route('/debug_api')
-def debug_api():
-    location = request.args.get('location', 'London')
-    url = API_ENDPOINTS.get(location, API_ENDPOINTS['London'])
-    try:
-        response = requests.get(url, params={'time': int(time.time() * 1000)}, timeout=10)
-        response.raise_for_status()
-        return response.json()
-    except Exception as e:
-        return {'error': str(e)}
-
->>>>>>> c83356af48a49be32908cbedda16596e6237e4f3
 @app.route('/')
 @limiter.limit("10 per minute")
 def get_pokestops():
@@ -1016,7 +769,6 @@ def get_pokestops():
         }
         return render_template_string(HTML_TEMPLATE, **fallback_data)
 
-<<<<<<< HEAD
 @app.route('/download_gpx')
 @limiter.limit("5 per minute")
 def download_gpx():
@@ -1061,21 +813,6 @@ def download_gpx():
             mimetype='application/gpx+xml',
             as_attachment=True,
             download_name=f'{pokestop_type}_pokestops.gpx'
-=======
-    # Sort stops by remaining_time descending (default sort)
-    stops = data.get('stops', {location: [] for location in API_ENDPOINTS.keys()})
-    for location in stops:
-        stops[location] = sorted(stops[location], key=lambda s: s['remaining_time'], reverse=True)
-
-    try:
-        return render_template_string(
-            HTML_TEMPLATE,
-            stops=stops,
-            last_updated=data.get('last_updated', datetime.now().strftime('%Y-%m-%d %H:%M:%S')),
-            pokestop_type=pokestop_type,
-            types=POKESTOP_TYPES.keys(),
-            debug=debug
->>>>>>> c83356af48a49be32908cbedda16596e6237e4f3
         )
         
     except Exception as e:
@@ -1162,7 +899,6 @@ def internal_error(e):
 
 # Initialize default cache thread
 if __name__ == '__main__':
-<<<<<<< HEAD
     logger.info("Starting PokeStops Tracker v2.0 on Render")
     
     # Start default fairy type cache
@@ -1175,8 +911,3 @@ if __name__ == '__main__':
         debug=config.DEBUG_MODE,
         threaded=True
     )
-=======
-    import os
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=False)
->>>>>>> c83356af48a49be32908cbedda16596e6237e4f3
