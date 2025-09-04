@@ -4,6 +4,7 @@ services:
     name: pokestops-tracker
     env: python
     plan: starter  # or 'standard' for better performance
+    branch: master  # Specify master branch
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn --bind 0.0.0.0:$PORT --workers 2 --timeout 120 --worker-class gthread --threads 2 app:app
     healthCheckPath: /health
