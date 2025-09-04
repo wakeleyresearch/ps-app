@@ -1,0 +1,29 @@
+# render.yaml
+services:
+  - type: web
+    name: pokestops-tracker
+    env: python
+    plan: starter  # or 'standard' for better performance
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn --bind 0.0.0.0:$PORT --workers 2 --timeout 120 --worker-class gthread --threads 2 app:app
+    healthCheckPath: /health
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true  # Render will generate a secure key
+      - key: DEBUG_MODE
+        value: false
+      - key: LOG_LEVEL
+        value: INFO
+      - key: RATE_LIMIT_PER_HOUR
+        value: 100
+      - key: UPDATE_INTERVAL
+        value: 120
+      - key: REQUEST_TIMEOUT
+        value: 10
+      - key: CACHE_DIR
+        value: /tmp/cache  # Use tmp for ephemeral storage on Render
+      - key: LOG_FILE
+        value: /tmp/logs/pokestop_tracker.log
+    # Optional: Custom domains
+    # domains:
+    #   - pokestops.yourdomain.com

@@ -3,3 +3,5 @@ requests==2.32.3
 gunicorn==23.0.0
 psutil==6.1.0
 PySocks==1.7.1
+flask-limiter==3.8.0
+markupsafe==2.1.5
