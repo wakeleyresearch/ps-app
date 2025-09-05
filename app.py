@@ -1,6 +1,4 @@
-from flask import Flask, render_template_string, request, send_file
-from io import BytesIO
-import xml.etree.ElementTree as ET
+from flask import Flask, render_template_string, request
 import requests
 from datetime import datetime
 import time
@@ -105,13 +103,15 @@ def update_cache(pokestop_type, type_info):
                 try:
                     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0'}
                     params = {'time': int(current_time * 1000)}
-                    response = requests.get(url, params=params, headers=headers, timeout=10, proxies=proxies)
+                    response = requests.get(url, params=params, headers=headers, timeout=15, proxies=proxies)
                     response.raise_for_status()
                     data = response.json()
                     meta = data.get('meta', {})
                     time_offset = current_time - int(meta.get('time', current_time))
 
                     stops = []
+                    invasion_count = len(data.get('invasions', []))
+                    print(f"📊 {location}: Found {invasion_count} total invasions")
                     for stop in data.get('invasions', []):
                         character_id = stop.get('character')
                         grunt_dialogue = stop.get('grunt_dialogue', '').lower()
