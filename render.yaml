@@ -1,44 +1,23 @@
+# render.yaml - Render service configuration
 services:
   - type: web
-    name: wakestops
-    runtime: python
-    plan: starter  # 2GB RAM, 1 CPU, $7/month
-    branch: master
+    name: pokestop-app
+    env: python
+    plan: starter  # or standard/pro based on your needs
     buildCommand: pip install -r requirements.txt
-    # Optimal for 2GB/1CPU: 1 worker with 8 threads
-    startCommand: gunicorn --bind 0.0.0.0:$PORT --workers 1 --timeout 120 --worker-class gthread --threads 8 --max-requests 1000 --max-requests-jitter 50 app:app
-    healthCheckPath: /health
-    autoDeploy: true  # Auto-deploy on git push
-    
+    startCommand: gunicorn -c gunicorn.conf.py app:app
     envVars:
-      # Security
-      - key: SECRET_KEY
-        generateValue: true
-      - key: DEBUG_MODE
-        value: false
-      
-      # Logging
-      - key: LOG_LEVEL
-        value: INFO
-      
-      # Performance tuning for 2GB memory
-      - key: MAX_CONCURRENT_TYPES
-        value: 10  # 10 types × ~35MB = 350MB (safe for 2GB)
-      - key: MAX_CONCURRENT_LOCATIONS
-        value: 5   # Don't overwhelm APIs
-      - key: UPDATE_INTERVAL
-        value: 120  # 2 minutes for active types
-      - key: IDLE_UPDATE_INTERVAL
-        value: 600  # 10 minutes for idle types
-      
-      # Storage
-      - key: CACHE_DIR
-        value: /tmp/cache
-      
-      # Optional: NordVPN SOCKS5 proxy credentials (if you have them)
-      # - key: NORDVPN_PROXY_HOST
-      #   value: your-proxy-host.nordvpn.com
-      # - key: NORDVPN_PROXY_USER
-      #   value: your-proxy-username
-      # - key: NORDVPN_PROXY_PASS
-      #   value: your-proxy-password
+      - key: PYTHON_VERSION
+        value: 3.9.18
+      - key: NORDVPN_PROXY_HOST
+        sync: false  # Set this in Render dashboard if using proxy
+      - key: NORDVPN_PROXY_USER
+        sync: false  # Set this in Render dashboard if using proxy
+      - key: NORDVPN_PROXY_PASS
+        sync: false  # Set this in Render dashboard if using proxy
+    healthCheckPath: /health
+    autoDeploy: true
+    # Render handles PORT automatically
+    numInstances: 1  # Start with 1, scale if needed
+    region: oregon  # Choose closest to your users
+    runtime: python3
