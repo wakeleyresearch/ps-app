@@ -7,7 +7,6 @@ import time
 import threading
 import json
 import os
-import psutil
 import gzip
 import hashlib
 import logging
@@ -30,10 +29,10 @@ logger = logging.getLogger(__name__)
 UPDATE_INTERVAL = 120
 # Minimum remaining time for PokéStops (seconds)
 MIN_REMAINING_TIME = 180
-# Maximum remaining time for PokéStops (seconds, to filter invalid data)
+# Maximum remaining time for PokéStops (seconds)
 MAX_REMAINING_TIME = 7200
 
-# CORRECTED Pokéstop type configuration
+# FIXED Pokéstop type configuration with correct gender mappings
 POKESTOP_TYPES = {
     # Regular types (will be grouped together in UI)
     'bug': {'ids': [6, 7], 'gender': {6: 'Female', 7: 'Male'}, 'display': 'Bug', 'category': 'regular'},
@@ -55,9 +54,9 @@ POKESTOP_TYPES = {
     'rock': {'ids': [36, 37], 'gender': {36: 'Female', 37: 'Male'}, 'display': 'Rock', 'category': 'regular'},
     'water': {'ids': [38, 39], 'gender': {38: 'Female', 39: 'Male'}, 'display': 'Water', 'category': 'regular'},
     
-    # Grunt types (will be grouped separately in UI)
-    'gruntmale': {'ids': [4], 'gender': {4: 'Male'}, 'display': 'Grunt', 'category': 'grunt'},
-    'gruntfemale': {'ids': [5], 'gender': {5: 'Female'}, 'display': 'Grunt', 'category': 'grunt'}
+    # Grunt types - FIXED: These should use the display name for gender, not character ID mapping
+    'gruntmale': {'ids': [4], 'display': 'Grunt', 'gender_display': 'Male', 'category': 'grunt'},
+    'gruntfemale': {'ids': [5], 'display': 'Grunt', 'gender_display': 'Female', 'category': 'grunt'}
 }
 
 # API endpoints
@@ -96,7 +95,6 @@ class ImprovedCacheManager:
         with self.cache_lock:
             # Try memory cache first
             if pokestop_type in self._memory_cache:
-                logger.debug(f"Cache hit (memory) for {pokestop_type}")
                 return self._memory_cache[pokestop_type].copy()
             
             # Try file cache
@@ -106,7 +104,6 @@ class ImprovedCacheManager:
                     with gzip.open(cache_file, 'rt', encoding='utf-8') as f:
                         data = json.load(f)
                         self._memory_cache[pokestop_type] = data
-                        logger.info(f"Cache loaded from file for {pokestop_type}")
                         return data.copy()
             except (json.JSONDecodeError, OSError) as e:
                 logger.warning(f"Failed to read cache for {pokestop_type}: {e}")
@@ -132,7 +129,6 @@ class ImprovedCacheManager:
                 
                 # Atomic move
                 os.rename(temp_file, cache_file)
-                logger.info(f"Cache updated for {pokestop_type} (in-memory + file backup)")
                 return True
             except Exception as e:
                 logger.error(f"Failed to write cache for {pokestop_type}: {e}")
@@ -159,7 +155,12 @@ class RobustScraper:
         self.type_info = type_info
         self.session = self._create_session()
         self.character_ids = type_info['ids']
-        self.gender_map = type_info['gender']
+        # FIXED: Handle gender mapping correctly for grunt types
+        if 'gender' in type_info:
+            self.gender_map = type_info['gender']
+        else:
+            # For grunt types, use the gender_display
+            self.gender_map = {id: type_info['gender_display'] for id in type_info['ids']}
         self.display_type = type_info['display']
         
         logger.info(f"Initialized scraper for {self.display_type} ({pokestop_type}) - Character IDs: {self.character_ids}")
@@ -171,7 +172,7 @@ class RobustScraper:
         # Retry strategy
         retry_strategy = Retry(
             total=3,
-            backoff_factor=2,
+            backoff_factor=1,
             status_forcelist=[429, 500, 502, 503, 504],
             allowed_methods=["HEAD", "GET", "OPTIONS"]
         )
@@ -188,7 +189,6 @@ class RobustScraper:
         if proxy_host and proxy_user and proxy_pass:
             proxy_url = f'socks5://{proxy_user}:{proxy_pass}@{proxy_host}:1080'
             session.proxies = {'http': proxy_url, 'https': proxy_url}
-            logger.info("Configured session with proxy")
         
         return session
     
@@ -200,7 +200,7 @@ class RobustScraper:
         
         for attempt in range(3):
             try:
-                response = self.session.get(url, params=params, headers=headers, timeout=15)
+                response = self.session.get(url, params=params, headers=headers, timeout=10)
                 response.raise_for_status()
                 
                 data = response.json()
@@ -212,12 +212,10 @@ class RobustScraper:
                 return stops
                 
             except requests.exceptions.ConnectionError as e:
-                logger.error(f"Connection error for {url}: {e}")
                 if attempt < 2:
-                    logger.warning(f"Attempt {attempt + 1}/3 failed for fetch_location_data: {e}")
-                    time.sleep(2 ** attempt)
+                    time.sleep(1)
                 else:
-                    logger.error(f"All attempts failed for {location}")
+                    logger.error(f"Connection failed for {location} after 3 attempts")
                     return []
             except Exception as e:
                 logger.error(f"Unexpected error fetching {location}: {e}")
@@ -253,15 +251,12 @@ class RobustScraper:
     
     def _is_matching_stop(self, character_id: int, grunt_dialogue: str) -> bool:
         """Determine if a stop matches this scraper's criteria."""
-        # Character ID match
         if character_id in self.character_ids:
             return True
         
-        # Grunt type matching
         if self.pokestop_type.startswith('grunt') and 'grunt' in grunt_dialogue:
             return True
         
-        # Type-specific dialogue matching
         if not self.pokestop_type.startswith('grunt'):
             base_type = self.pokestop_type.replace('male', '').replace('female', '')
             if base_type.lower() in grunt_dialogue:
@@ -273,35 +268,50 @@ class RobustScraper:
         
         return False
 
-class ThreadSafeTypeManager:
-    """Manage active scraper threads safely with proper initialization order."""
+class FastTypeManager:
+    """Manage active scraper threads with fast parallel initialization."""
     
     def __init__(self):
         self.active_types: Set[str] = set()
         self.type_lock = Lock()
         self.cache_manager = ImprovedCacheManager()
-        self.initialization_order = []
-        self._setup_initialization_order()
     
-    def _setup_initialization_order(self):
-        """Setup the order in which types should be initialized."""
-        # Prioritize common types first, then less common ones
-        priority_types = ['fairy', 'fire', 'water', 'poison', 'ghost', 'ice', 'metal']
+    def initialize_all_types_fast(self):
+        """Initialize all types in parallel for fast startup."""
+        logger.info("Starting FAST parallel initialization of all PokéStop types...")
         
-        # Add priority types first
-        for ptype in priority_types:
-            if ptype in POKESTOP_TYPES:
-                self.initialization_order.append(ptype)
+        # Initialize all caches immediately in parallel
+        with ThreadPoolExecutor(max_workers=len(POKESTOP_TYPES)) as executor:
+            futures = []
+            for pokestop_type, type_info in POKESTOP_TYPES.items():
+                future = executor.submit(self._initialize_single_type, pokestop_type, type_info)
+                futures.append(future)
+            
+            # Wait for all initializations to complete
+            for future in as_completed(futures):
+                try:
+                    future.result()
+                except Exception as e:
+                    logger.error(f"Failed to initialize type: {e}")
         
-        # Add remaining types
-        for ptype in POKESTOP_TYPES:
-            if ptype not in self.initialization_order:
-                self.initialization_order.append(ptype)
+        logger.info("✅ Fast initialization complete for all types")
     
-    def is_type_active(self, pokestop_type: str) -> bool:
-        """Check if a type is already being scraped."""
-        with self.type_lock:
-            return pokestop_type in self.active_types
+    def _initialize_single_type(self, pokestop_type: str, type_info: Dict):
+        """Initialize a single type with immediate cache creation and thread start."""
+        if self.activate_type(pokestop_type):
+            # Create empty cache immediately
+            empty_cache = self.cache_manager._get_empty_cache()
+            self.cache_manager.write_cache(pokestop_type, empty_cache)
+            
+            # Start background thread immediately
+            thread = threading.Thread(
+                target=self.update_cache_for_type,
+                args=(pokestop_type, type_info),
+                daemon=True,
+                name=f"cache-{pokestop_type}"
+            )
+            thread.start()
+            logger.info(f"🛠️ Started cache thread for {pokestop_type}")
     
     def activate_type(self, pokestop_type: str) -> bool:
         """Activate a type for scraping. Returns True if newly activated."""
@@ -311,33 +321,10 @@ class ThreadSafeTypeManager:
                 return True
             return False
     
-    def initialize_all_types(self):
-        """Initialize all types in priority order."""
-        logger.info("Starting initialization of all PokéStop types...")
-        
-        for pokestop_type in self.initialization_order:
-            if pokestop_type not in POKESTOP_TYPES:
-                continue
-                
-            type_info = POKESTOP_TYPES[pokestop_type]
-            
-            if self.activate_type(pokestop_type):
-                # Initialize cache immediately
-                empty_cache = self.cache_manager._get_empty_cache()
-                self.cache_manager.write_cache(pokestop_type, empty_cache)
-                
-                # Start background thread
-                thread = threading.Thread(
-                    target=self.update_cache_for_type,
-                    args=(pokestop_type, type_info),
-                    daemon=True,
-                    name=f"cache-{pokestop_type}"
-                )
-                thread.start()
-                logger.info(f"🛠️ Started cache thread for {pokestop_type}")
-                
-                # Small delay to avoid overwhelming APIs
-                time.sleep(1)
+    def is_type_active(self, pokestop_type: str) -> bool:
+        """Check if a type is already being scraped."""
+        with self.type_lock:
+            return pokestop_type in self.active_types
     
     def update_cache_for_type(self, pokestop_type: str, type_info: Dict):
         """Update cache for a specific type."""
@@ -345,11 +332,9 @@ class ThreadSafeTypeManager:
         
         while True:
             try:
-                logger.info(f"Starting cache update for {pokestop_type}")
-                
                 # Fetch data from all locations in parallel
                 stops_by_location = {}
-                with ThreadPoolExecutor(max_workers=3) as executor:
+                with ThreadPoolExecutor(max_workers=5) as executor:
                     future_to_location = {
                         executor.submit(scraper.fetch_location_data, location, url): location
                         for location, url in API_ENDPOINTS.items()
@@ -368,7 +353,6 @@ class ThreadSafeTypeManager:
                     'stops': stops_by_location,
                     'last_updated': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 }
-                new_data['hash'] = self._calculate_data_hash(new_data)
                 
                 # Write to cache
                 self.cache_manager.write_cache(pokestop_type, new_data)
@@ -379,45 +363,219 @@ class ThreadSafeTypeManager:
                 logger.error(f"Error updating cache for {pokestop_type}: {e}")
             
             time.sleep(UPDATE_INTERVAL)
-    
-    def _calculate_data_hash(self, data: Dict) -> str:
-        """Calculate hash of data to detect changes."""
-        stops_data = data.get('stops', {})
-        data_str = json.dumps(stops_data, sort_keys=True, separators=(',', ':'))
-        return hashlib.md5(data_str.encode()).hexdigest()
 
 # Global type manager
-type_manager = ThreadSafeTypeManager()
+type_manager = FastTypeManager()
 
-# CORRECTED HTML template with proper grouping
+# MOBILE-OPTIMIZED HTML template
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html>
 <head>
     <title>{{ display_name }}-Type PokéStops</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
     <meta http-equiv="refresh" content="120">
     <style>
-        body { font-family: Arial, sans-serif; margin: 20px; }
-        h1 { color: #333; }
-        h2 { color: #555; margin-top: 20px; }
-        h3 { color: #666; margin-top: 15px; margin-bottom: 10px; }
-        ul { list-style-type: none; padding: 0; }
-        li { margin: 10px 0; }
-        a { color: #0066cc; text-decoration: none; }
-        a:hover { text-decoration: underline; }
-        .no-stops { color: #888; }
-        .debug { font-size: 0.9em; color: #666; }
-        .type-group { margin-bottom: 30px; }
-        .type-links { margin-bottom: 10px; }
-        .type-links a { margin-right: 10px; padding: 5px 10px; background: #f0f0f0; border-radius: 3px; }
-        .type-links a.active { background: #007acc; color: white; }
-        .gender-links { margin-bottom: 10px; }
-        .gender-links a { margin-right: 5px; padding: 3px 8px; background: #e0e0e0; border-radius: 3px; font-size: 0.9em; }
-        .gender-links a.active { background: #28a745; color: white; }
+        * { box-sizing: border-box; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; 
+            margin: 0; 
+            padding: 15px; 
+            font-size: 16px;
+            line-height: 1.4;
+        }
+        
+        h1 { 
+            color: #333; 
+            font-size: 1.5em; 
+            margin: 0 0 15px 0; 
+        }
+        
+        h2 { 
+            color: #555; 
+            font-size: 1.3em; 
+            margin: 25px 0 15px 0; 
+            border-bottom: 2px solid #007acc;
+            padding-bottom: 5px;
+        }
+        
+        h3 { 
+            color: #666; 
+            font-size: 1.1em; 
+            margin: 20px 0 10px 0; 
+        }
+        
+        .info-text {
+            font-size: 0.9em;
+            color: #666;
+            margin-bottom: 20px;
+        }
+        
+        .type-group { 
+            margin-bottom: 25px; 
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+        }
+        
+        .type-links { 
+            display: flex; 
+            flex-wrap: wrap; 
+            gap: 8px; 
+            margin-bottom: 10px; 
+        }
+        
+        .type-links a { 
+            padding: 8px 12px; 
+            background: #e9ecef; 
+            color: #495057;
+            text-decoration: none;
+            border-radius: 6px; 
+            font-size: 0.9em;
+            white-space: nowrap;
+            transition: all 0.2s;
+            min-height: 36px;
+            display: flex;
+            align-items: center;
+        }
+        
+        .type-links a:hover { 
+            background: #dee2e6; 
+        }
+        
+        .type-links a.active { 
+            background: #007acc; 
+            color: white; 
+            font-weight: 500;
+        }
+        
+        .controls {
+            margin: 20px 0;
+            padding: 15px;
+            background: #fff;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+        }
+        
+        .sort-btn {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 6px;
+            font-size: 0.9em;
+            cursor: pointer;
+            width: 100%;
+            margin-bottom: 10px;
+            transition: background 0.2s;
+        }
+        
+        .sort-btn:hover {
+            background: #218838;
+        }
+        
+        .download-link {
+            display: inline-block;
+            background: #17a2b8;
+            color: white;
+            text-decoration: none;
+            padding: 10px 15px;
+            border-radius: 6px;
+            font-size: 0.9em;
+            text-align: center;
+            width: 100%;
+            margin-top: 10px;
+        }
+        
+        .download-link:hover {
+            background: #138496;
+        }
+        
+        ul { 
+            list-style-type: none; 
+            padding: 0; 
+            margin: 0;
+        }
+        
+        li { 
+            margin: 8px 0; 
+            padding: 12px;
+            background: #fff;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            font-size: 0.9em;
+            line-height: 1.5;
+        }
+        
+        li a { 
+            color: #007acc; 
+            text-decoration: none; 
+            word-break: break-all;
+        }
+        
+        li a:hover { 
+            text-decoration: underline; 
+        }
+        
+        .no-stops { 
+            color: #6c757d; 
+            font-style: italic;
+            text-align: center;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 6px;
+        }
+        
+        .debug { 
+            font-size: 0.8em; 
+            color: #6c757d; 
+            display: block;
+            margin-top: 5px;
+            font-family: monospace;
+        }
+        
+        .stop-header {
+            font-weight: 500;
+            color: #333;
+        }
+        
+        .time-remaining {
+            color: #28a745;
+            font-weight: 500;
+        }
+        
+        /* Mobile optimizations */
+        @media (max-width: 480px) {
+            body { 
+                padding: 10px; 
+                font-size: 14px;
+            }
+            
+            h1 { 
+                font-size: 1.4em; 
+            }
+            
+            h2 { 
+                font-size: 1.2em; 
+            }
+            
+            .type-links a { 
+                font-size: 0.8em; 
+                padding: 6px 10px;
+                min-height: 32px;
+            }
+            
+            li { 
+                font-size: 0.85em; 
+                padding: 10px;
+            }
+            
+            .debug { 
+                font-size: 0.75em; 
+            }
+        }
     </style>
     <script>
-        // JavaScript for sorting functionality
         var stopsData = {
             {% for location in stops.keys() %}
             '{{ location }}': {{ stops[location] | tojson }},
@@ -463,9 +621,15 @@ HTML_TEMPLATE = """
             ul.innerHTML = '';
             stops.forEach(stop => {
                 let li = document.createElement('li');
-                let html = `${stop.type} (${stop.gender}) ${stop.name} (<a href="https://maps.google.com/?q=${stop.lat},${stop.lng}">${stop.lat}, ${stop.lng}</a>) - ${Math.floor(stop.remaining_time / 60)} min ${stop.remaining_time % 60} sec remaining`;
+                let minutes = Math.floor(stop.remaining_time / 60);
+                let seconds = Math.floor(stop.remaining_time % 60);
+                
+                let html = `<div class="stop-header">${stop.type} (${stop.gender}) ${stop.name}</div>`;
+                html += `<div><a href="https://maps.google.com/?q=${stop.lat},${stop.lng}">${stop.lat}, ${stop.lng}</a></div>`;
+                html += `<div class="time-remaining">${minutes} min ${seconds} sec remaining</div>`;
+                
                 if (isDebug) {
-                    html += `<span class="debug"> (Character: ${stop.character}, Dialogue: ${stop.grunt_dialogue || 'N/A'}, Encounter ID: ${stop.encounter_pokemon_id || 'N/A'})</span>`;
+                    html += `<div class="debug">Character: ${stop.character}, Dialogue: ${stop.grunt_dialogue || 'N/A'}, Encounter ID: ${stop.encounter_pokemon_id || 'N/A'}</div>`;
                 }
                 li.innerHTML = html;
                 ul.appendChild(li);
@@ -489,9 +653,12 @@ HTML_TEMPLATE = """
     </script>
 </head>
 <body>
-    <h1>{{ display_name }}-Type PokéStops</h1>
-    <p>Last updated: {{ last_updated }}</p>
-    <p>Updates every 2 minutes. Only PokéStops with more than 3 minutes remaining are shown.</p>
+    <h1>{{ display_name }} PokéStops</h1>
+    
+    <div class="info-text">
+        <div>Last updated: {{ last_updated }}</div>
+        <div>Updates every 2 minutes. Only PokéStops with more than 3 minutes remaining are shown.</div>
+    </div>
     
     <div class="type-group">
         <h3>Regular Types:</h3>
@@ -520,25 +687,30 @@ HTML_TEMPLATE = """
         </div>
     </div>
     
-    <p>
-        <a href="/download_gpx?type={{ pokestop_type }}" target="_blank">Download GPX (over 10 min remaining)</a>
-    </p>
+    <div class="controls">
+        <a href="/download_gpx?type={{ pokestop_type }}" class="download-link">Download GPX (over 10 min remaining)</a>
+    </div>
     
     {% for location, location_stops in stops.items() %}
         <h2>{{ location }}</h2>
-        <button id="sort-btn-{{ location }}" onclick="toggleSort('{{ location }}')">Sort by Nearest Neighbor</button>
+        <div class="controls">
+            <button id="sort-btn-{{ location }}" class="sort-btn" onclick="toggleSort('{{ location }}')">Sort by Nearest Neighbor</button>
+        </div>
         {% if location_stops %}
             <ul id="stops-list-{{ location }}">
                 {% for stop in location_stops %}
-                    <li>{{ stop.type }} ({{ stop.gender }}) {{ stop.name }} (<a href="https://maps.google.com/?q={{ stop.lat }},{{ stop.lng }}">{{ stop.lat }}, {{ stop.lng }}</a>) - {{ stop.remaining_time // 60 }} min {{ stop.remaining_time % 60 }} sec remaining
+                    <li>
+                        <div class="stop-header">{{ stop.type }} ({{ stop.gender }}) {{ stop.name }}</div>
+                        <div><a href="https://maps.google.com/?q={{ stop.lat }},{{ stop.lng }}">{{ stop.lat }}, {{ stop.lng }}</a></div>
+                        <div class="time-remaining">{{ stop.remaining_time // 60 }} min {{ stop.remaining_time % 60 }} sec remaining</div>
                         {% if debug %}
-                            <span class="debug"> (Character: {{ stop.character }}, Dialogue: {{ stop.grunt_dialogue|default('N/A') }}, Encounter ID: {{ stop.encounter_pokemon_id|default('N/A') }})</span>
+                            <div class="debug">Character: {{ stop.character }}, Dialogue: {{ stop.grunt_dialogue|default('N/A') }}, Encounter ID: {{ stop.encounter_pokemon_id|default('N/A') }}</div>
                         {% endif %}
                     </li>
                 {% endfor %}
             </ul>
         {% else %}
-            <p class="no-stops">No {{ display_name }}-type PokéStops found in {{ location }}.</p>
+            <div class="no-stops">No {{ display_name }}-type PokéStops found in {{ location }}.</div>
         {% endif %}
     {% endfor %}
 </body>
@@ -556,7 +728,7 @@ def get_type_groups():
         if info['category'] == 'grunt':
             grunt_types[type_key] = {
                 'display': info['display'],
-                'gender_display': 'Male' if 'male' in type_key else 'Female'
+                'gender_display': info['gender_display']  # FIXED: Use gender_display from config
             }
         else:
             # Check if this is a base type or gendered variant
@@ -645,9 +817,8 @@ def get_pokestops():
     pokestop_type = request.args.get('type', 'fairy').lower()
     debug = request.args.get('debug', 'false').lower() == 'true'
     
-    # Handle legacy single-gender types by mapping to new system
+    # Handle legacy types
     if pokestop_type not in POKESTOP_TYPES:
-        # Try to find a match
         for key in POKESTOP_TYPES.keys():
             if key.startswith(pokestop_type):
                 pokestop_type = key
@@ -659,20 +830,7 @@ def get_pokestops():
     
     # Ensure this type is being cached
     if not type_manager.is_type_active(pokestop_type):
-        if type_manager.activate_type(pokestop_type):
-            # Initialize cache immediately
-            empty_cache = type_manager.cache_manager._get_empty_cache()
-            type_manager.cache_manager.write_cache(pokestop_type, empty_cache)
-            
-            # Start background thread
-            thread = threading.Thread(
-                target=type_manager.update_cache_for_type,
-                args=(pokestop_type, type_info),
-                daemon=True,
-                name=f"cache-{pokestop_type}"
-            )
-            thread.start()
-            logger.info(f"🛠️ Started cache thread for {pokestop_type}")
+        type_manager._initialize_single_type(pokestop_type, type_info)
     
     try:
         data = type_manager.cache_manager.read_cache(pokestop_type)
@@ -690,9 +848,15 @@ def get_pokestops():
     
     # Determine display name
     if pokestop_type.endswith('male'):
-        display_name = f"{type_info['display']} (Male)"
+        if pokestop_type.startswith('grunt'):
+            display_name = f"Grunt (Male)"
+        else:
+            display_name = f"{type_info['display']} (Male)"
     elif pokestop_type.endswith('female'):
-        display_name = f"{type_info['display']} (Female)"
+        if pokestop_type.startswith('grunt'):
+            display_name = f"Grunt (Female)"
+        else:
+            display_name = f"{type_info['display']} (Female)"
     else:
         display_name = type_info['display']
     
@@ -721,14 +885,13 @@ def get_pokestops():
         )
 
 if __name__ == '__main__':
-    # Initialize all types on startup
+    # FAST parallel initialization on startup
     initialization_thread = threading.Thread(
-        target=type_manager.initialize_all_types,
+        target=type_manager.initialize_all_types_fast,
         daemon=True,
-        name="initialization"
+        name="fast-initialization"
     )
     initialization_thread.start()
     
-    # Start Flask app
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
