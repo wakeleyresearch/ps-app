@@ -487,10 +487,30 @@ def get_pokestops():
     cache_file = get_cache_file(pokestop_type)
     type_info = POKESTOP_TYPES[pokestop_type]
 
+    # Check if cache exists and is recent (less than 5 minutes old)
+    cache_exists = False
+    cache_recent = False
+    try:
+        if os.path.exists(cache_file):
+            cache_exists = True
+            # Check if cache is recent
+            cache_age = time.time() - os.path.getmtime(cache_file)
+            if cache_age < 300:  # 5 minutes
+                cache_recent = True
+    except:
+        pass
+
     # Start cache thread for new type if not active
     with active_types_lock:
         if pokestop_type not in active_types:
             initialize_cache(pokestop_type)
+            
+            # If cache doesn't exist or is old, fetch initial data synchronously
+            if not cache_exists or not cache_recent:
+                print(f"📥 Fetching initial data for {pokestop_type}...")
+                fetch_initial_data(pokestop_type, type_info)
+            
+            # Start background update thread
             threading.Thread(target=update_cache, args=(pokestop_type, type_info), daemon=True).start()
             active_types.add(pokestop_type)
             print(f"🛠️ Started cache thread for {pokestop_type}")
@@ -517,6 +537,96 @@ def get_pokestops():
         types=POKESTOP_TYPES.keys(),
         debug=debug
     )
+
+def fetch_initial_data(pokestop_type, type_info):
+    """Fetch initial data for a type synchronously (single location for speed)."""
+    character_ids = type_info['ids']
+    gender_map = type_info['gender']
+    display_type = type_info['display']
+    cache_file = get_cache_file(pokestop_type)
+    
+    # Just fetch from one location for initial load (NYC is usually reliable)
+    try:
+        url = API_ENDPOINTS['NYC']
+        current_time = time.time()
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0'}
+        params = {'time': int(current_time * 1000)}
+        
+        response = requests.get(url, params=params, headers=headers, timeout=5)
+        response.raise_for_status()
+        data = response.json()
+        meta = data.get('meta', {})
+        time_offset = current_time - int(meta.get('time', current_time))
+        
+        stops = []
+        for stop in data.get('invasions', []):
+            character_id = stop.get('character')
+            grunt_dialogue = stop.get('grunt_dialogue', '').lower()
+            
+            if character_id not in character_ids:
+                continue
+                
+            remaining_time = stop['invasion_end'] - (current_time - time_offset)
+            
+            if not (MIN_REMAINING_TIME < remaining_time < MAX_REMAINING_TIME):
+                continue
+            
+            # For typed grunts (not generic grunts), check dialogue
+            if pokestop_type not in ['gruntmale', 'gruntfemale']:
+                dialogue_matches = False
+                
+                if pokestop_type == 'ghost' and 'ke...ke...' in grunt_dialogue:
+                    dialogue_matches = True
+                elif pokestop_type == 'electric' and any(kw in grunt_dialogue for kw in ['shock', 'electric', 'volt', 'charge']):
+                    dialogue_matches = True
+                elif pokestop_type.replace('male', '').replace('female', '') in grunt_dialogue:
+                    dialogue_matches = True
+                
+                if not dialogue_matches:
+                    continue
+            
+            stops.append({
+                'lat': stop['lat'],
+                'lng': stop['lng'],
+                'name': stop.get('name', 'Unnamed PokéStop'),
+                'remaining_time': remaining_time,
+                'character': character_id,
+                'type': display_type,
+                'gender': gender_map.get(character_id, 'Unknown'),
+                'grunt_dialogue': grunt_dialogue,
+                'encounter_pokemon_id': stop.get('encounter_pokemon_id', None)
+            })
+        
+        # Write initial data to cache
+        initial_data = {
+            'stops': {
+                'NYC': stops,
+                'Vancouver': [],
+                'Singapore': [],
+                'London': [],
+                'Sydney': []
+            },
+            'last_updated': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        }
+        
+        os.makedirs(os.path.dirname(cache_file), exist_ok=True)
+        with open(cache_file, 'w') as f:
+            json.dump(initial_data, f)
+        
+        print(f"✅ Initial data fetched for {pokestop_type}: {len(stops)} stops from NYC")
+        
+    except Exception as e:
+        print(f"⚠️ Failed to fetch initial data for {pokestop_type}: {e}")
+        # Create empty cache to prevent loading issues
+        initial_data = {
+            'stops': {location: [] for location in API_ENDPOINTS.keys()},
+            'last_updated': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        }
+        try:
+            with open(cache_file, 'w') as f:
+                json.dump(initial_data, f)
+        except:
+            pass
 
 if __name__ == '__main__':
     import os
