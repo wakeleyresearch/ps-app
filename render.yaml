@@ -1,4 +1,4 @@
-# render.yaml
+# render.yaml - Optimized for shared state with better concurrency
 services:
   - type: web
     name: pokestops-tracker
@@ -6,7 +6,9 @@ services:
     plan: starter  # or 'standard' for better performance
     branch: master  # Specify master branch
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn --bind 0.0.0.0:$PORT --workers 2 --timeout 120 --worker-class gthread --threads 2 app:app
+    # CHANGED: 1 worker with 4 threads instead of 2 workers with 2 threads
+    # This maintains shared state while improving concurrency
+    startCommand: gunicorn --bind 0.0.0.0:$PORT --workers 1 --timeout 120 --worker-class gthread --threads 4 app:app
     healthCheckPath: /health
     envVars:
       - key: SECRET_KEY
