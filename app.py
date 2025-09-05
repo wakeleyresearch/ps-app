@@ -20,19 +20,19 @@ app = Flask(__name__)
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# Cache update intervals
-INITIAL_UPDATE_INTERVAL = 120  # 2 minutes for active types
-IDLE_UPDATE_INTERVAL = 600     # 10 minutes for idle types
-LAST_ACCESS_TIMEOUT = 300       # 5 minutes - mark type as idle if not accessed
+# Cache update intervals - Optimized for 2GB memory
+INITIAL_UPDATE_INTERVAL = int(os.getenv('UPDATE_INTERVAL', 120))  # 2 minutes for active types
+IDLE_UPDATE_INTERVAL = int(os.getenv('IDLE_UPDATE_INTERVAL', 600))  # 10 minutes for idle types
+LAST_ACCESS_TIMEOUT = 300  # 5 minutes - mark type as idle if not accessed
 
 # Time filters
 MIN_REMAINING_TIME = 180
 MAX_REMAINING_TIME = 7200
 
-# Concurrent limits
-MAX_CONCURRENT_TYPES = 8
-MAX_CONCURRENT_LOCATIONS = 5
-MAX_QUEUED_TYPES = 10
+# Concurrent limits - Optimized for 2GB/1CPU Render Starter
+MAX_CONCURRENT_TYPES = int(os.getenv('MAX_CONCURRENT_TYPES', 10))  # 10 types safe for 2GB
+MAX_CONCURRENT_LOCATIONS = int(os.getenv('MAX_CONCURRENT_LOCATIONS', 5))
+MAX_QUEUED_TYPES = 15
 
 # Type management
 active_types = {}
@@ -55,7 +55,7 @@ debug_handler = DebugLogHandler()
 debug_handler.setFormatter(logging.Formatter('%(message)s'))
 logger.addHandler(debug_handler)
 
-# Grunt type configuration - FIXED dialogue keywords
+# Grunt type configuration with proper display names
 POKESTOP_TYPES = {
     # Grunt types separated by gender
     'gruntmale': {'ids': [4], 'gender': {4: 'Male'}, 'display': 'Grunt (Male)', 'dialogue_keywords': ['grunt']},
@@ -65,7 +65,7 @@ POKESTOP_TYPES = {
     'watermale': {'ids': [39], 'gender': {39: 'Male'}, 'display': 'Water (Male)', 'dialogue_keywords': ['water', 'splash', 'ocean', 'sea']},
     'waterfemale': {'ids': [38], 'gender': {38: 'Female'}, 'display': 'Water (Female)', 'dialogue_keywords': ['water', 'splash', 'ocean', 'sea']},
     
-    # All other types with improved dialogue keywords
+    # All other types with dialogue keywords
     'bug': {'ids': [6, 7], 'gender': {7: 'Male', 6: 'Female'}, 'display': 'Bug', 'dialogue_keywords': ['bug', 'insect', 'creepy', 'crawl']},
     'dark': {'ids': [10, 11], 'gender': {11: 'Male', 10: 'Female'}, 'display': 'Dark', 'dialogue_keywords': ['dark', 'shadow', 'night']},
     'dragon': {'ids': [12, 13], 'gender': {13: 'Male', 12: 'Female'}, 'display': 'Dragon', 'dialogue_keywords': ['dragon', 'roar', 'legendary']},
@@ -83,6 +83,31 @@ POKESTOP_TYPES = {
     'rock': {'ids': [36, 37], 'gender': {37: 'Male', 36: 'Female'}, 'display': 'Rock', 'dialogue_keywords': ['rock', 'stone', 'boulder']},
     'ghost': {'ids': [47, 48], 'gender': {47: 'Male', 48: 'Female'}, 'display': 'Ghost', 'dialogue_keywords': ['ghost', 'ke...ke...', 'boo', 'spirit']},
     'electric': {'ids': [48, 49], 'gender': {49: 'Male', 48: 'Female'}, 'display': 'Electric', 'dialogue_keywords': ['electric', 'shock', 'volt', 'charge', 'zap', 'thunder', 'spark']}
+}
+
+# Display names mapping for UI (fixes waterfemale label bug)
+POKESTOP_DISPLAY_NAMES = {
+    'gruntmale': 'Grunt (Male)',
+    'gruntfemale': 'Grunt (Female)',
+    'watermale': 'Water (Male)',
+    'waterfemale': 'Water (Female)',
+    'bug': 'Bug',
+    'dark': 'Dark',
+    'dragon': 'Dragon',
+    'fairy': 'Fairy',
+    'fighting': 'Fighting',
+    'fire': 'Fire',
+    'flying': 'Flying',
+    'grass': 'Grass',
+    'ground': 'Ground',
+    'ice': 'Ice',
+    'metal': 'Metal',
+    'normal': 'Normal',
+    'poison': 'Poison',
+    'psychic': 'Psychic',
+    'rock': 'Rock',
+    'ghost': 'Ghost',
+    'electric': 'Electric'
 }
 
 # API endpoints
@@ -112,8 +137,7 @@ def get_cooldown_time(distance_km):
 
 def get_cache_file(pokestop_type):
     """Return cache file path for the given type."""
-    # Use /tmp for Render's ephemeral storage
-    cache_dir = '/tmp'
+    cache_dir = '/tmp'  # Use /tmp for Render's ephemeral storage
     return os.path.join(cache_dir, f'pokestops_{pokestop_type}.json')
 
 def initialize_cache(pokestop_type):
@@ -123,7 +147,6 @@ def initialize_cache(pokestop_type):
         cache_dir = os.path.dirname(cache_file)
         os.makedirs(cache_dir, exist_ok=True)
         
-        # Always create/overwrite with empty cache structure
         empty_cache = {
             'stops': {location: [] for location in API_ENDPOINTS.keys()},
             'last_updated': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -137,6 +160,48 @@ def initialize_cache(pokestop_type):
     except Exception as e:
         logger.error(f"⚠️ Failed to initialize cache file for {pokestop_type}: {e}")
         return False
+
+def get_container_memory_stats():
+    """Get actual container memory stats from cgroup (works in Docker/containers)"""
+    try:
+        # Try to read from cgroup v2 first (newer systems)
+        with open('/sys/fs/cgroup/memory.current', 'r') as f:
+            used = int(f.read().strip())
+        with open('/sys/fs/cgroup/memory.max', 'r') as f:
+            limit = int(f.read().strip())
+        
+        if limit > 9223372036854775807:  # Max value means no limit
+            limit = 2 * 1024 * 1024 * 1024  # Default to 2GB if no limit
+            
+        return {
+            'used_mb': used / 1024 / 1024,
+            'limit_mb': limit / 1024 / 1024,
+            'percent': (used / limit) * 100 if limit > 0 else 0
+        }
+    except FileNotFoundError:
+        try:
+            # Try cgroup v1 (older systems)
+            with open('/sys/fs/cgroup/memory/memory.usage_in_bytes', 'r') as f:
+                used = int(f.read().strip())
+            with open('/sys/fs/cgroup/memory/memory.limit_in_bytes', 'r') as f:
+                limit = int(f.read().strip())
+            
+            if limit > 9223372036854775807:  # Max value means no limit
+                limit = 2 * 1024 * 1024 * 1024  # Default to 2GB
+                
+            return {
+                'used_mb': used / 1024 / 1024,
+                'limit_mb': limit / 1024 / 1024,
+                'percent': (used / limit) * 100 if limit > 0 else 0
+            }
+        except:
+            # Fallback to psutil but with manual limit
+            memory = psutil.virtual_memory()
+            return {
+                'used_mb': (memory.total - memory.available) / 1024 / 1024,
+                'limit_mb': 2048,  # Your known limit
+                'percent': min(((memory.total - memory.available) / (2 * 1024 * 1024 * 1024)) * 100, 100)
+            }
 
 def fetch_location(location, url, character_ids, gender_map, display_type, pokestop_type, type_info):
     """Fetch data for a single location with better error handling."""
@@ -171,8 +236,6 @@ def fetch_location(location, url, character_ids, gender_map, display_type, pokes
                     continue
                 
                 grunt_dialogue = stop.get('grunt_dialogue', '').lower()
-                
-                # Simplified matching logic
                 dialogue_match = True  # Default to true for character ID matches
                 
                 stops.append({
@@ -294,11 +357,9 @@ def start_type_updater(pokestop_type):
     try:
         type_info = POKESTOP_TYPES[pokestop_type]
         
-        # Ensure cache is initialized
         if not initialize_cache(pokestop_type):
             logger.error(f"Failed to initialize cache for {pokestop_type}")
         
-        # Start update thread
         thread = threading.Thread(
             target=update_cache_smart, 
             args=(pokestop_type, type_info),
@@ -328,7 +389,6 @@ def fetch_initial_data(pokestop_type, type_info):
     cache_file = get_cache_file(pokestop_type)
     
     try:
-        # Try NYC first as it usually has the most data
         location, stops = fetch_location(
             'NYC', API_ENDPOINTS['NYC'], 
             character_ids, gender_map, display_type, 
@@ -355,14 +415,13 @@ def fetch_initial_data(pokestop_type, type_info):
         
     except Exception as e:
         logger.error(f"⚠️ Failed to fetch initial data for {pokestop_type}: {e}")
-        # Create empty cache so the page can still load
         initialize_cache(pokestop_type)
 
 # Initialize queue processor
 threading.Thread(target=process_queue, daemon=True, name="QueueProcessor").start()
 
-# Start only fairy as default (most common request)
-DEFAULT_TYPES = ['fairy']
+# Start default types (most popular for 2GB memory)
+DEFAULT_TYPES = ['fairy', 'gruntmale', 'gruntfemale', 'dragon', 'watermale']
 for pokestop_type in DEFAULT_TYPES:
     start_type_updater(pokestop_type)
 
@@ -372,10 +431,10 @@ def health():
     """Health check endpoint for Render"""
     return jsonify({'status': 'healthy', 'timestamp': datetime.now().isoformat()})
 
-# Debug status endpoint
+# Debug status endpoint with accurate container memory
 @app.route('/debug/status')
 def debug_status():
-    """System status overview"""
+    """System status with accurate container memory"""
     with active_types_lock:
         active_list = list(active_types.keys())
         active_details = {
@@ -388,18 +447,37 @@ def debug_status():
     with type_queue_lock:
         queued = list(type_queue)
     
-    memory = psutil.virtual_memory()
+    # Get real container memory stats
+    mem_stats = get_container_memory_stats()
     cpu_percent = psutil.cpu_percent(interval=1)
+    
+    # Calculate estimated memory per type
+    estimated_mb_per_type = 35
+    max_safe_types = int((mem_stats['limit_mb'] * 0.7) / estimated_mb_per_type)
     
     return jsonify({
         'status': 'running',
         'active_types': active_list,
         'active_details': active_details,
         'queued_types': queued,
-        'system': {
-            'cpu_percent': cpu_percent,
-            'memory_percent': memory.percent,
-            'memory_available_mb': memory.available / 1024 / 1024,
+        'active_count': len(active_list),
+        'max_concurrent': MAX_CONCURRENT_TYPES,
+        'recommended_max_types': max_safe_types,
+        'queue_length': len(queued),
+        'container_memory': {
+            'used_mb': round(mem_stats['used_mb'], 1),
+            'limit_mb': round(mem_stats['limit_mb'], 1),
+            'percent': round(mem_stats['percent'], 1),
+            'estimated_mb_per_type': estimated_mb_per_type
+        },
+        'cpu': {
+            'percent': cpu_percent,
+            'cores': 1
+        },
+        'intervals': {
+            'initial_update': INITIAL_UPDATE_INTERVAL,
+            'idle_update': IDLE_UPDATE_INTERVAL,
+            'last_access_timeout': LAST_ACCESS_TIMEOUT
         }
     })
 
@@ -425,21 +503,17 @@ def get_pokestops():
         cache_exists = os.path.exists(cache_file)
         
         if not cache_exists:
-            # Initialize cache first
             initialize_cache(pokestop_type)
-            # Fetch initial data
             fetch_initial_data(pokestop_type, type_info)
         
         with active_types_lock:
             if pokestop_type not in active_types:
                 if len(active_types) >= MAX_CONCURRENT_TYPES:
-                    # Add to queue
                     with type_queue_lock:
                         if pokestop_type not in type_queue:
                             type_queue.append(pokestop_type)
                             logger.info(f"📋 Added {pokestop_type} to queue")
                 else:
-                    # Start immediately
                     start_type_updater(pokestop_type)
         
         # Load cache with fallback
@@ -449,7 +523,6 @@ def get_pokestops():
             logger.debug(f"📖 Loaded cache for {pokestop_type}")
         except Exception as e:
             logger.error(f"⚠️ Error reading cache for {pokestop_type}: {e}")
-            # Create empty data structure
             data = {
                 'stops': {location: [] for location in API_ENDPOINTS.keys()}, 
                 'last_updated': 'Initializing...'
@@ -457,7 +530,6 @@ def get_pokestops():
         
         # Sort stops
         stops = data.get('stops', {})
-        # Ensure all locations exist in stops
         for location in API_ENDPOINTS.keys():
             if location not in stops:
                 stops[location] = []
@@ -477,13 +549,13 @@ def get_pokestops():
             pokestop_type=pokestop_type,
             pokestop_type_display=type_info['display'],
             types=POKESTOP_TYPES.keys(),
+            display_names=POKESTOP_DISPLAY_NAMES,
             active_types_list=active_types_list,
             queued_types_list=queued_types_list,
             debug=debug
         )
     except Exception as e:
         logger.error(f"Error in main route: {e}\n{traceback.format_exc()}")
-        # Return a basic error page
         return f"""
         <html>
         <head><title>Error</title></head>
@@ -496,7 +568,7 @@ def get_pokestops():
         </html>
         """, 500
 
-# HTML template
+# HTML template with fixed button labels
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html>
@@ -629,8 +701,11 @@ HTML_TEMPLATE = """
         <div class="type-selector">
             <strong>Select Type:</strong>
             <div class="type-buttons">
-                {% for type in types %}
-                    <a href="?type={{ type }}{% if debug %}&debug=true{% endif %}" class="type-btn {% if pokestop_type == type %}active{% endif %}">{{ type.replace('male', ' (Male)').replace('female', ' (Female)').title() }}</a>
+                {% for type_key in types %}
+                    <a href="?type={{ type_key }}{% if debug %}&debug=true{% endif %}" 
+                       class="type-btn {% if pokestop_type == type_key %}active{% endif %}">
+                        {{ display_names.get(type_key, type_key.title()) }}
+                    </a>
                 {% endfor %}
             </div>
         </div>

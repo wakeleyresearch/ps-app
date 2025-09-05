@@ -1,32 +1,44 @@
-# render.yaml - Optimized for shared state with better concurrency
 services:
   - type: web
-    name: pokestops-tracker
-    env: python
-    plan: starter  # or 'standard' for better performance
-    branch: master  # Specify master branch
+    name: wakestops
+    runtime: python
+    plan: starter  # 2GB RAM, 1 CPU, $7/month
+    branch: master
     buildCommand: pip install -r requirements.txt
-    # CHANGED: 1 worker with 4 threads instead of 2 workers with 2 threads
-    # This maintains shared state while improving concurrency
-    startCommand: gunicorn --bind 0.0.0.0:$PORT --workers 1 --timeout 120 --worker-class gthread --threads 4 app:app
+    # Optimal for 2GB/1CPU: 1 worker with 8 threads
+    startCommand: gunicorn --bind 0.0.0.0:$PORT --workers 1 --timeout 120 --worker-class gthread --threads 8 --max-requests 1000 --max-requests-jitter 50 app:app
     healthCheckPath: /health
+    autoDeploy: true  # Auto-deploy on git push
+    
     envVars:
+      # Security
       - key: SECRET_KEY
-        generateValue: true  # Render will generate a secure key
+        generateValue: true
       - key: DEBUG_MODE
         value: false
+      
+      # Logging
       - key: LOG_LEVEL
         value: INFO
-      - key: RATE_LIMIT_PER_HOUR
-        value: 100
+      
+      # Performance tuning for 2GB memory
+      - key: MAX_CONCURRENT_TYPES
+        value: 10  # 10 types × ~35MB = 350MB (safe for 2GB)
+      - key: MAX_CONCURRENT_LOCATIONS
+        value: 5   # Don't overwhelm APIs
       - key: UPDATE_INTERVAL
-        value: 120
-      - key: REQUEST_TIMEOUT
-        value: 10
+        value: 120  # 2 minutes for active types
+      - key: IDLE_UPDATE_INTERVAL
+        value: 600  # 10 minutes for idle types
+      
+      # Storage
       - key: CACHE_DIR
-        value: /tmp/cache  # Use tmp for ephemeral storage on Render
-      - key: LOG_FILE
-        value: /tmp/logs/pokestop_tracker.log
-    # Optional: Custom domains
-    # domains:
-    #   - pokestops.yourdomain.com
+        value: /tmp/cache
+      
+      # Optional: NordVPN SOCKS5 proxy credentials (if you have them)
+      # - key: NORDVPN_PROXY_HOST
+      #   value: your-proxy-host.nordvpn.com
+      # - key: NORDVPN_PROXY_USER
+      #   value: your-proxy-username
+      # - key: NORDVPN_PROXY_PASS
+      #   value: your-proxy-password
