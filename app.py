@@ -15,6 +15,7 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List, Set
+from collections import OrderedDict
 
 app = Flask(__name__)
 
@@ -32,44 +33,63 @@ MIN_REMAINING_TIME = 180
 # Maximum remaining time for PokéStops (seconds)
 MAX_REMAINING_TIME = 7200
 
-# FIXED Pokéstop type configuration with correct gender mappings
-POKESTOP_TYPES = {
-    # Regular types (will be grouped together in UI)
-    'bug': {'ids': [6, 7], 'gender': {6: 'Female', 7: 'Male'}, 'display': 'Bug', 'category': 'regular'},
-    'dark': {'ids': [10, 11], 'gender': {10: 'Female', 11: 'Male'}, 'display': 'Dark', 'category': 'regular'},
-    'dragon': {'ids': [12, 13], 'gender': {12: 'Female', 13: 'Male'}, 'display': 'Dragon', 'category': 'regular'},
-    'electric': {'ids': [48, 49], 'gender': {48: 'Female', 49: 'Male'}, 'display': 'Electric', 'category': 'regular'},
-    'fairy': {'ids': [14, 15], 'gender': {14: 'Female', 15: 'Male'}, 'display': 'Fairy', 'category': 'regular'},
-    'fighting': {'ids': [16, 17], 'gender': {16: 'Female', 17: 'Male'}, 'display': 'Fighting', 'category': 'regular'},
-    'fire': {'ids': [18, 19], 'gender': {18: 'Female', 19: 'Male'}, 'display': 'Fire', 'category': 'regular'},
-    'flying': {'ids': [20, 21], 'gender': {20: 'Female', 21: 'Male'}, 'display': 'Flying', 'category': 'regular'},
-    'ghost': {'ids': [47, 48], 'gender': {47: 'Male', 48: 'Female'}, 'display': 'Ghost', 'category': 'regular'},
-    'grass': {'ids': [22, 23], 'gender': {22: 'Female', 23: 'Male'}, 'display': 'Grass', 'category': 'regular'},
-    'ground': {'ids': [24, 25], 'gender': {24: 'Female', 25: 'Male'}, 'display': 'Ground', 'category': 'regular'},
-    'ice': {'ids': [26, 27], 'gender': {26: 'Female', 27: 'Male'}, 'display': 'Ice', 'category': 'regular'},
-    'metal': {'ids': [28, 29], 'gender': {28: 'Female', 29: 'Male'}, 'display': 'Metal', 'category': 'regular'},
-    'normal': {'ids': [30, 31], 'gender': {30: 'Female', 31: 'Male'}, 'display': 'Normal', 'category': 'regular'},
-    'poison': {'ids': [32, 33], 'gender': {32: 'Female', 33: 'Male'}, 'display': 'Poison', 'category': 'regular'},
-    'psychic': {'ids': [34, 35], 'gender': {34: 'Female', 35: 'Male'}, 'display': 'Psychic', 'category': 'regular'},
-    'rock': {'ids': [36, 37], 'gender': {36: 'Female', 37: 'Male'}, 'display': 'Rock', 'category': 'regular'},
-    'water': {'ids': [38, 39], 'gender': {38: 'Female', 39: 'Male'}, 'display': 'Water', 'category': 'regular'},
+# FIXED: Separate water male/female types and ensure consistent ordering
+POKESTOP_TYPES = OrderedDict([
+    # Regular types with separate male/female pages
+    ('bugfemale', {'ids': [6], 'gender': {6: 'Female'}, 'display': 'Bug', 'category': 'regular'}),
+    ('bugmale', {'ids': [7], 'gender': {7: 'Male'}, 'display': 'Bug', 'category': 'regular'}),
+    ('darkfemale', {'ids': [10], 'gender': {10: 'Female'}, 'display': 'Dark', 'category': 'regular'}),
+    ('darkmale', {'ids': [11], 'gender': {11: 'Male'}, 'display': 'Dark', 'category': 'regular'}),
+    ('dragonfemale', {'ids': [12], 'gender': {12: 'Female'}, 'display': 'Dragon', 'category': 'regular'}),
+    ('dragonmale', {'ids': [13], 'gender': {13: 'Male'}, 'display': 'Dragon', 'category': 'regular'}),
+    ('electricfemale', {'ids': [48], 'gender': {48: 'Female'}, 'display': 'Electric', 'category': 'regular'}),
+    ('electricmale', {'ids': [49], 'gender': {49: 'Male'}, 'display': 'Electric', 'category': 'regular'}),
+    ('fairyfemale', {'ids': [14], 'gender': {14: 'Female'}, 'display': 'Fairy', 'category': 'regular'}),
+    ('fairymale', {'ids': [15], 'gender': {15: 'Male'}, 'display': 'Fairy', 'category': 'regular'}),
+    ('fightingfemale', {'ids': [16], 'gender': {16: 'Female'}, 'display': 'Fighting', 'category': 'regular'}),
+    ('fightingmale', {'ids': [17], 'gender': {17: 'Male'}, 'display': 'Fighting', 'category': 'regular'}),
+    ('firefemale', {'ids': [18], 'gender': {18: 'Female'}, 'display': 'Fire', 'category': 'regular'}),
+    ('firemale', {'ids': [19], 'gender': {19: 'Male'}, 'display': 'Fire', 'category': 'regular'}),
+    ('flyingfemale', {'ids': [20], 'gender': {20: 'Female'}, 'display': 'Flying', 'category': 'regular'}),
+    ('flyingmale', {'ids': [21], 'gender': {21: 'Male'}, 'display': 'Flying', 'category': 'regular'}),
+    ('ghostmale', {'ids': [47], 'gender': {47: 'Male'}, 'display': 'Ghost', 'category': 'regular'}),
+    ('ghostfemale', {'ids': [48], 'gender': {48: 'Female'}, 'display': 'Ghost', 'category': 'regular'}),
+    ('grassfemale', {'ids': [22], 'gender': {22: 'Female'}, 'display': 'Grass', 'category': 'regular'}),
+    ('grassmale', {'ids': [23], 'gender': {23: 'Male'}, 'display': 'Grass', 'category': 'regular'}),
+    ('groundfemale', {'ids': [24], 'gender': {24: 'Female'}, 'display': 'Ground', 'category': 'regular'}),
+    ('groundmale', {'ids': [25], 'gender': {25: 'Male'}, 'display': 'Ground', 'category': 'regular'}),
+    ('icefemale', {'ids': [26], 'gender': {26: 'Female'}, 'display': 'Ice', 'category': 'regular'}),
+    ('icemale', {'ids': [27], 'gender': {27: 'Male'}, 'display': 'Ice', 'category': 'regular'}),
+    ('metalfemale', {'ids': [28], 'gender': {28: 'Female'}, 'display': 'Metal', 'category': 'regular'}),
+    ('metalmale', {'ids': [29], 'gender': {29: 'Male'}, 'display': 'Metal', 'category': 'regular'}),
+    ('normalfemale', {'ids': [30], 'gender': {30: 'Female'}, 'display': 'Normal', 'category': 'regular'}),
+    ('normalmale', {'ids': [31], 'gender': {31: 'Male'}, 'display': 'Normal', 'category': 'regular'}),
+    ('poisonfemale', {'ids': [32], 'gender': {32: 'Female'}, 'display': 'Poison', 'category': 'regular'}),
+    ('poisonmale', {'ids': [33], 'gender': {33: 'Male'}, 'display': 'Poison', 'category': 'regular'}),
+    ('psychicfemale', {'ids': [34], 'gender': {34: 'Female'}, 'display': 'Psychic', 'category': 'regular'}),
+    ('psychicmale', {'ids': [35], 'gender': {35: 'Male'}, 'display': 'Psychic', 'category': 'regular'}),
+    ('rockfemale', {'ids': [36], 'gender': {36: 'Female'}, 'display': 'Rock', 'category': 'regular'}),
+    ('rockmale', {'ids': [37], 'gender': {37: 'Male'}, 'display': 'Rock', 'category': 'regular'}),
+    # FIXED: Water types split into separate male/female
+    ('waterfemale', {'ids': [38], 'gender': {38: 'Female'}, 'display': 'Water', 'category': 'regular'}),
+    ('watermale', {'ids': [39], 'gender': {39: 'Male'}, 'display': 'Water', 'category': 'regular'}),
     
-    # Grunt types - FIXED: These should use the display name for gender, not character ID mapping
-    'gruntmale': {'ids': [4], 'display': 'Grunt', 'gender_display': 'Male', 'category': 'grunt'},
-    'gruntfemale': {'ids': [5], 'display': 'Grunt', 'gender_display': 'Female', 'category': 'grunt'}
-}
+    # Grunt types
+    ('gruntmale', {'ids': [4], 'display': 'Grunt', 'gender_display': 'Male', 'category': 'grunt'}),
+    ('gruntfemale', {'ids': [5], 'display': 'Grunt', 'gender_display': 'Female', 'category': 'grunt'})
+])
 
-# API endpoints
-API_ENDPOINTS = {
-    'NYC': 'https://nycpokemap.com/pokestop.php',
-    'Vancouver': 'https://vanpokemap.com/pokestop.php',
-    'Singapore': 'https://sgpokemap.com/pokestop.php',
-    'London': 'https://londonpogomap.com/pokestop.php',
-    'Sydney': 'https://sydneypogomap.com/pokestop.php'
-}
+# FIXED: Ordered API endpoints to maintain consistent location order
+API_ENDPOINTS = OrderedDict([
+    ('NYC', 'https://nycpokemap.com/pokestop.php'),
+    ('Vancouver', 'https://vanpokemap.com/pokestop.php'),
+    ('London', 'https://londonpogomap.com/pokestop.php'),
+    ('Singapore', 'https://sgpokemap.com/pokestop.php'),
+    ('Sydney', 'https://sydneypogomap.com/pokestop.php')
+])
 
 class ImprovedCacheManager:
-    """Thread-safe cache manager with compression and atomic writes."""
+    """Thread-safe cache manager with compression and proper persistence."""
     
     def __init__(self, cache_dir: str = '/app/cache'):
         self.cache_dir = cache_dir
@@ -91,45 +111,55 @@ class ImprovedCacheManager:
         return os.path.join(self.cache_dir, f'pokestops_{pokestop_type}.json.gz')
     
     def read_cache(self, pokestop_type: str) -> Dict:
-        """Read cache with memory cache fallback."""
+        """Read cache with proper fallback handling."""
         with self.cache_lock:
             # Try memory cache first
             if pokestop_type in self._memory_cache:
+                logger.debug(f"Cache hit (memory) for {pokestop_type}")
                 return self._memory_cache[pokestop_type].copy()
             
             # Try file cache
             cache_file = self.get_cache_file(pokestop_type)
             try:
-                if os.path.exists(cache_file):
+                if os.path.exists(cache_file) and os.path.getsize(cache_file) > 0:
                     with gzip.open(cache_file, 'rt', encoding='utf-8') as f:
                         data = json.load(f)
-                        self._memory_cache[pokestop_type] = data
-                        return data.copy()
+                        # Validate cache structure
+                        if 'stops' in data and isinstance(data['stops'], dict):
+                            self._memory_cache[pokestop_type] = data
+                            logger.info(f"Cache loaded from file for {pokestop_type}")
+                            return data.copy()
             except (json.JSONDecodeError, OSError) as e:
                 logger.warning(f"Failed to read cache for {pokestop_type}: {e}")
             
-            # Return empty cache and initialize it
-            empty_cache = self._get_empty_cache()
-            self.write_cache(pokestop_type, empty_cache)
-            return empty_cache
+            # Return empty cache structure
+            logger.info(f"No valid cache found for {pokestop_type}, returning empty cache")
+            return self._get_empty_cache()
     
     def write_cache(self, pokestop_type: str, data: Dict) -> bool:
         """Write cache with atomic operation and compression."""
         with self.cache_lock:
-            # Update memory cache
-            self._memory_cache[pokestop_type] = data.copy()
-            
-            # Write to file atomically
-            cache_file = self.get_cache_file(pokestop_type)
-            temp_file = cache_file + '.tmp'
-            
             try:
+                # Validate data structure
+                if not data or 'stops' not in data:
+                    logger.warning(f"Invalid data structure for {pokestop_type}, skipping write")
+                    return False
+                
+                # Update memory cache
+                self._memory_cache[pokestop_type] = data.copy()
+                
+                # Write to file atomically
+                cache_file = self.get_cache_file(pokestop_type)
+                temp_file = cache_file + '.tmp'
+                
                 with gzip.open(temp_file, 'wt', encoding='utf-8') as f:
                     json.dump(data, f, separators=(',', ':'))
                 
                 # Atomic move
                 os.rename(temp_file, cache_file)
+                logger.info(f"Cache successfully written for {pokestop_type}")
                 return True
+                
             except Exception as e:
                 logger.error(f"Failed to write cache for {pokestop_type}: {e}")
                 if os.path.exists(temp_file):
@@ -140,9 +170,9 @@ class ImprovedCacheManager:
                 return False
     
     def _get_empty_cache(self) -> Dict:
-        """Return empty cache structure."""
+        """Return empty cache structure with proper ordering."""
         return {
-            'stops': {location: [] for location in API_ENDPOINTS.keys()},
+            'stops': OrderedDict([(location, []) for location in API_ENDPOINTS.keys()]),
             'last_updated': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             'hash': hashlib.md5(b'empty').hexdigest()
         }
@@ -155,14 +185,15 @@ class RobustScraper:
         self.type_info = type_info
         self.session = self._create_session()
         self.character_ids = type_info['ids']
-        # FIXED: Handle gender mapping correctly for grunt types
+        
+        # Handle gender mapping correctly for both regular and grunt types
         if 'gender' in type_info:
             self.gender_map = type_info['gender']
         else:
             # For grunt types, use the gender_display
             self.gender_map = {id: type_info['gender_display'] for id in type_info['ids']}
-        self.display_type = type_info['display']
         
+        self.display_type = type_info['display']
         logger.info(f"Initialized scraper for {self.display_type} ({pokestop_type}) - Character IDs: {self.character_ids}")
     
     def _create_session(self) -> requests.Session:
@@ -192,6 +223,17 @@ class RobustScraper:
         
         return session
     
+    def fetch_all_locations(self) -> OrderedDict:
+        """Fetch data from all locations maintaining order."""
+        stops_by_location = OrderedDict()
+        
+        # Process locations in order
+        for location, url in API_ENDPOINTS.items():
+            stops_by_location[location] = self.fetch_location_data(location, url)
+            time.sleep(2)  # Rate limiting between API calls
+        
+        return stops_by_location
+    
     def fetch_location_data(self, location: str, url: str) -> List[Dict]:
         """Fetch data for a single location with improved error handling."""
         current_time = time.time()
@@ -200,7 +242,7 @@ class RobustScraper:
         
         for attempt in range(3):
             try:
-                response = self.session.get(url, params=params, headers=headers, timeout=10)
+                response = self.session.get(url, params=params, headers=headers, timeout=15)
                 response.raise_for_status()
                 
                 data = response.json()
@@ -213,7 +255,8 @@ class RobustScraper:
                 
             except requests.exceptions.ConnectionError as e:
                 if attempt < 2:
-                    time.sleep(1)
+                    logger.warning(f"Attempt {attempt + 1}/3 failed for {location}: {e}")
+                    time.sleep(2 ** attempt)
                 else:
                     logger.error(f"Connection failed for {location} after 3 attempts")
                     return []
@@ -268,42 +311,42 @@ class RobustScraper:
         
         return False
 
-class FastTypeManager:
-    """Manage active scraper threads with fast parallel initialization."""
+class PersistentTypeManager:
+    """Manage active scraper threads with proper cache persistence."""
     
     def __init__(self):
         self.active_types: Set[str] = set()
         self.type_lock = Lock()
         self.cache_manager = ImprovedCacheManager()
+        self.initialization_complete = False
     
-    def initialize_all_types_fast(self):
-        """Initialize all types in parallel for fast startup."""
-        logger.info("Starting FAST parallel initialization of all PokéStop types...")
+    def initialize_all_types_sequential(self):
+        """Initialize all types sequentially to ensure proper cache creation."""
+        logger.info("Starting sequential initialization of all PokéStop types...")
         
-        # Initialize all caches immediately in parallel
-        with ThreadPoolExecutor(max_workers=len(POKESTOP_TYPES)) as executor:
-            futures = []
-            for pokestop_type, type_info in POKESTOP_TYPES.items():
-                future = executor.submit(self._initialize_single_type, pokestop_type, type_info)
-                futures.append(future)
-            
-            # Wait for all initializations to complete
-            for future in as_completed(futures):
-                try:
-                    future.result()
-                except Exception as e:
-                    logger.error(f"Failed to initialize type: {e}")
+        # Priority order: most common types first
+        priority_types = ['fairyfemale', 'fairymale', 'firefemale', 'firemale', 'waterfemale', 'watermale']
+        remaining_types = [t for t in POKESTOP_TYPES.keys() if t not in priority_types]
         
-        logger.info("✅ Fast initialization complete for all types")
+        all_types = priority_types + remaining_types
+        
+        for pokestop_type in all_types:
+            if pokestop_type in POKESTOP_TYPES:
+                type_info = POKESTOP_TYPES[pokestop_type]
+                self._initialize_single_type(pokestop_type, type_info)
+                time.sleep(1)  # Small delay to prevent API overload
+        
+        self.initialization_complete = True
+        logger.info("✅ Sequential initialization complete for all types")
     
     def _initialize_single_type(self, pokestop_type: str, type_info: Dict):
-        """Initialize a single type with immediate cache creation and thread start."""
+        """Initialize a single type with proper cache creation."""
         if self.activate_type(pokestop_type):
-            # Create empty cache immediately
+            # Create initial empty cache
             empty_cache = self.cache_manager._get_empty_cache()
             self.cache_manager.write_cache(pokestop_type, empty_cache)
             
-            # Start background thread immediately
+            # Start background thread
             thread = threading.Thread(
                 target=self.update_cache_for_type,
                 args=(pokestop_type, type_info),
@@ -327,37 +370,28 @@ class FastTypeManager:
             return pokestop_type in self.active_types
     
     def update_cache_for_type(self, pokestop_type: str, type_info: Dict):
-        """Update cache for a specific type."""
+        """Update cache for a specific type with proper persistence."""
         scraper = RobustScraper(pokestop_type, type_info)
         
         while True:
             try:
-                # Fetch data from all locations in parallel
-                stops_by_location = {}
-                with ThreadPoolExecutor(max_workers=5) as executor:
-                    future_to_location = {
-                        executor.submit(scraper.fetch_location_data, location, url): location
-                        for location, url in API_ENDPOINTS.items()
-                    }
-                    
-                    for future in as_completed(future_to_location):
-                        location = future_to_location[future]
-                        try:
-                            stops_by_location[location] = future.result()
-                        except Exception as e:
-                            logger.error(f"Failed to fetch data for {location}: {e}")
-                            stops_by_location[location] = []
+                logger.info(f"Starting cache update for {pokestop_type}")
                 
-                # Prepare cache data
+                # Fetch data maintaining location order
+                stops_by_location = scraper.fetch_all_locations()
+                
+                # Prepare cache data with proper structure
                 new_data = {
                     'stops': stops_by_location,
                     'last_updated': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 }
                 
                 # Write to cache
-                self.cache_manager.write_cache(pokestop_type, new_data)
-                total_stops = sum(len(stops) for stops in stops_by_location.values())
-                logger.info(f"✅ Cache updated for {pokestop_type}: {total_stops} total stops")
+                if self.cache_manager.write_cache(pokestop_type, new_data):
+                    total_stops = sum(len(stops) for stops in stops_by_location.values())
+                    logger.info(f"✅ Cache updated for {pokestop_type}: {total_stops} total stops")
+                else:
+                    logger.error(f"Failed to write cache for {pokestop_type}")
                 
             except Exception as e:
                 logger.error(f"Error updating cache for {pokestop_type}: {e}")
@@ -365,14 +399,14 @@ class FastTypeManager:
             time.sleep(UPDATE_INTERVAL)
 
 # Global type manager
-type_manager = FastTypeManager()
+type_manager = PersistentTypeManager()
 
-# MOBILE-OPTIMIZED HTML template
+# MOBILE-OPTIMIZED HTML template with fixed water type support
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html>
 <head>
-    <title>{{ display_name }}-Type PokéStops</title>
+    <title>{{ display_name }} PokéStops</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
     <meta http-equiv="refresh" content="120">
     <style>
@@ -383,12 +417,14 @@ HTML_TEMPLATE = """
             padding: 15px; 
             font-size: 16px;
             line-height: 1.4;
+            background-color: #f8f9fa;
         }
         
         h1 { 
             color: #333; 
             font-size: 1.5em; 
             margin: 0 0 15px 0; 
+            text-align: center;
         }
         
         h2 { 
@@ -409,13 +445,15 @@ HTML_TEMPLATE = """
             font-size: 0.9em;
             color: #666;
             margin-bottom: 20px;
+            text-align: center;
         }
         
         .type-group { 
             margin-bottom: 25px; 
-            background: #f8f9fa;
+            background: #fff;
             padding: 15px;
             border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
         
         .type-links { 
@@ -437,16 +475,19 @@ HTML_TEMPLATE = """
             min-height: 36px;
             display: flex;
             align-items: center;
+            border: 1px solid #dee2e6;
         }
         
         .type-links a:hover { 
             background: #dee2e6; 
+            transform: translateY(-1px);
         }
         
         .type-links a.active { 
             background: #007acc; 
             color: white; 
             font-weight: 500;
+            border-color: #007acc;
         }
         
         .controls {
@@ -455,19 +496,21 @@ HTML_TEMPLATE = """
             background: #fff;
             border: 1px solid #dee2e6;
             border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
         
         .sort-btn {
             background: #28a745;
             color: white;
             border: none;
-            padding: 10px 15px;
+            padding: 12px 15px;
             border-radius: 6px;
             font-size: 0.9em;
             cursor: pointer;
             width: 100%;
             margin-bottom: 10px;
             transition: background 0.2s;
+            min-height: 44px;
         }
         
         .sort-btn:hover {
@@ -479,12 +522,16 @@ HTML_TEMPLATE = """
             background: #17a2b8;
             color: white;
             text-decoration: none;
-            padding: 10px 15px;
+            padding: 12px 15px;
             border-radius: 6px;
             font-size: 0.9em;
             text-align: center;
             width: 100%;
             margin-top: 10px;
+            min-height: 44px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
         
         .download-link:hover {
@@ -505,6 +552,7 @@ HTML_TEMPLATE = """
             border-radius: 6px;
             font-size: 0.9em;
             line-height: 1.5;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
         }
         
         li a { 
@@ -524,6 +572,7 @@ HTML_TEMPLATE = """
             padding: 20px;
             background: #f8f9fa;
             border-radius: 6px;
+            border: 1px solid #dee2e6;
         }
         
         .debug { 
@@ -572,6 +621,11 @@ HTML_TEMPLATE = """
             
             .debug { 
                 font-size: 0.75em; 
+            }
+            
+            .sort-btn, .download-link {
+                min-height: 40px;
+                font-size: 0.85em;
             }
         }
     </style>
@@ -664,15 +718,10 @@ HTML_TEMPLATE = """
         <h3>Regular Types:</h3>
         <div class="type-links">
             {% for type_key, info in regular_types.items() %}
-                {% if info.has_genders %}
-                    <a href="?type={{ type_key }}female{% if debug %}&debug=true{% endif %}"
-                       {% if pokestop_type == type_key + 'female' %}class="active"{% endif %}>{{ info.display }} ♀</a>
-                    <a href="?type={{ type_key }}male{% if debug %}&debug=true{% endif %}"
-                       {% if pokestop_type == type_key + 'male' %}class="active"{% endif %}>{{ info.display }} ♂</a>
-                {% else %}
-                    <a href="?type={{ type_key }}{% if debug %}&debug=true{% endif %}"
-                       {% if pokestop_type == type_key %}class="active"{% endif %}>{{ info.display }}</a>
-                {% endif %}
+                <a href="?type={{ type_key }}female{% if debug %}&debug=true{% endif %}"
+                   {% if pokestop_type == type_key + 'female' %}class="active"{% endif %}>{{ info.display }} ♀</a>
+                <a href="?type={{ type_key }}male{% if debug %}&debug=true{% endif %}"
+                   {% if pokestop_type == type_key + 'male' %}class="active"{% endif %}>{{ info.display }} ♂</a>
             {% endfor %}
         </div>
     </div>
@@ -719,61 +768,40 @@ HTML_TEMPLATE = """
 
 def get_type_groups():
     """Get organized type groups for the UI."""
-    regular_types = {}
-    grunt_types = {}
+    regular_types = OrderedDict()
+    grunt_types = OrderedDict()
     
-    # Process types and determine if they have gender variants
-    type_bases = {}
+    # Track base types to create grouped UI
+    seen_base_types = set()
+    
     for type_key, info in POKESTOP_TYPES.items():
         if info['category'] == 'grunt':
             grunt_types[type_key] = {
                 'display': info['display'],
-                'gender_display': info['gender_display']  # FIXED: Use gender_display from config
+                'gender_display': info['gender_display']
             }
         else:
-            # Check if this is a base type or gendered variant
+            # Extract base type (remove male/female suffix)
             base_type = type_key.replace('male', '').replace('female', '')
-            if base_type not in type_bases:
-                type_bases[base_type] = {
-                    'display': info['display'],
-                    'has_male': False,
-                    'has_female': False
+            if base_type not in seen_base_types:
+                regular_types[base_type] = {
+                    'display': info['display']
                 }
-            
-            if type_key.endswith('male'):
-                type_bases[base_type]['has_male'] = True
-            elif type_key.endswith('female'):
-                type_bases[base_type]['has_female'] = True
-            else:
-                # Single type (no gender variants)
-                type_bases[base_type]['single'] = True
-    
-    # Build regular types with gender info
-    for base_type, info in type_bases.items():
-        if info.get('single'):
-            regular_types[base_type] = {
-                'display': info['display'],
-                'has_genders': False
-            }
-        elif info['has_male'] and info['has_female']:
-            regular_types[base_type] = {
-                'display': info['display'],
-                'has_genders': True
-            }
+                seen_base_types.add(base_type)
     
     return regular_types, grunt_types
 
 @app.route('/download_gpx')
 def download_gpx():
-    pokestop_type = request.args.get('type', 'fairy').lower()
+    pokestop_type = request.args.get('type', 'fairyfemale').lower()
     if pokestop_type not in POKESTOP_TYPES:
-        pokestop_type = 'fairy'
+        pokestop_type = 'fairyfemale'
     
     try:
         data = type_manager.cache_manager.read_cache(pokestop_type)
     except Exception as e:
         logger.warning(f"Error reading cache for {pokestop_type}: {e}")
-        data = {'stops': {location: [] for location in API_ENDPOINTS.keys()}, 'last_updated': 'Unknown'}
+        data = {'stops': OrderedDict([(location, []) for location in API_ENDPOINTS.keys()]), 'last_updated': 'Unknown'}
     
     # Filter stops with remaining_time > 600 seconds (10 minutes)
     filtered_stops = []
@@ -814,17 +842,18 @@ def health_check():
 
 @app.route('/')
 def get_pokestops():
-    pokestop_type = request.args.get('type', 'fairy').lower()
+    pokestop_type = request.args.get('type', 'fairyfemale').lower()
     debug = request.args.get('debug', 'false').lower() == 'true'
     
-    # Handle legacy types
+    # Handle legacy types and ensure valid type
     if pokestop_type not in POKESTOP_TYPES:
+        # Try to find a close match
         for key in POKESTOP_TYPES.keys():
-            if key.startswith(pokestop_type):
+            if key.startswith(pokestop_type.replace('male', '').replace('female', '')):
                 pokestop_type = key
                 break
         else:
-            pokestop_type = 'fairy'
+            pokestop_type = 'fairyfemale'
     
     type_info = POKESTOP_TYPES[pokestop_type]
     
@@ -834,14 +863,23 @@ def get_pokestops():
     
     try:
         data = type_manager.cache_manager.read_cache(pokestop_type)
+        logger.info(f"Successfully loaded cache for {pokestop_type}")
     except Exception as e:
         logger.warning(f"Error reading cache for {pokestop_type}: {e}")
-        data = {'stops': {location: [] for location in API_ENDPOINTS.keys()}, 'last_updated': 'Unknown'}
+        data = {
+            'stops': OrderedDict([(location, []) for location in API_ENDPOINTS.keys()]), 
+            'last_updated': 'Unknown'
+        }
     
-    # Sort stops by remaining_time descending
-    stops = data.get('stops', {location: [] for location in API_ENDPOINTS.keys()})
+    # Ensure proper ordering and sorting
+    stops = data.get('stops', OrderedDict())
+    if not isinstance(stops, OrderedDict):
+        stops = OrderedDict([(location, stops.get(location, [])) for location in API_ENDPOINTS.keys()])
+    
+    # Sort stops by remaining_time descending within each location
     for location in stops:
-        stops[location] = sorted(stops[location], key=lambda s: s['remaining_time'], reverse=True)
+        if stops[location]:
+            stops[location] = sorted(stops[location], key=lambda s: s.get('remaining_time', 0), reverse=True)
     
     # Get organized type groups
     regular_types, grunt_types = get_type_groups()
@@ -849,12 +887,12 @@ def get_pokestops():
     # Determine display name
     if pokestop_type.endswith('male'):
         if pokestop_type.startswith('grunt'):
-            display_name = f"Grunt (Male)"
+            display_name = "Grunt (Male)"
         else:
             display_name = f"{type_info['display']} (Male)"
     elif pokestop_type.endswith('female'):
         if pokestop_type.startswith('grunt'):
-            display_name = f"Grunt (Female)"
+            display_name = "Grunt (Female)"
         else:
             display_name = f"{type_info['display']} (Female)"
     else:
@@ -873,9 +911,11 @@ def get_pokestops():
         )
     except Exception as e:
         logger.error(f"Render failed for {pokestop_type}: {e}")
+        # Return empty page with proper structure
+        empty_stops = OrderedDict([(location, []) for location in API_ENDPOINTS.keys()])
         return render_template_string(
             HTML_TEMPLATE,
-            stops={location: [] for location in API_ENDPOINTS.keys()},
+            stops=empty_stops,
             last_updated=datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             pokestop_type=pokestop_type,
             display_name=display_name,
@@ -885,11 +925,11 @@ def get_pokestops():
         )
 
 if __name__ == '__main__':
-    # FAST parallel initialization on startup
+    # Sequential initialization to ensure proper cache persistence
     initialization_thread = threading.Thread(
-        target=type_manager.initialize_all_types_fast,
+        target=type_manager.initialize_all_types_sequential,
         daemon=True,
-        name="fast-initialization"
+        name="sequential-initialization"
     )
     initialization_thread.start()
     
