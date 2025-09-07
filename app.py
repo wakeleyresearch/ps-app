@@ -331,10 +331,7 @@ def signal_handler(signum, frame):
 signal.signal(signal.SIGTERM, signal_handler)
 signal.signal(signal.SIGINT, signal_handler)
 
-# Modern HTML template with proper button labels
-# Replace the HTML_TEMPLATE variable in your app.py with this updated version
-
-# Modern HTML template with light/dark mode toggle
+# Modern HTML template WITHOUT auto-refresh for static frontend
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
@@ -342,7 +339,7 @@ HTML_TEMPLATE = """
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ display_title }}-Type PokéStops</title>
-    <meta http-equiv="refresh" content="60">
+    <!-- REMOVED auto-refresh meta tag for static frontend -->
     <style>
         * {
             margin: 0;
@@ -371,6 +368,9 @@ HTML_TEMPLATE = """
             --hover-bg: #f0f4f8;
             --success-bg: #28a745;
             --distance-bg: #6c757d;
+            --info-bg: #d1ecf1;
+            --info-border: #bee5eb;
+            --info-text: #0c5460;
         }
 
         /* Dark mode */
@@ -394,6 +394,9 @@ HTML_TEMPLATE = """
             --hover-bg: #262c36;
             --success-bg: #238636;
             --distance-bg: #484f58;
+            --info-bg: #1e3a5f;
+            --info-border: #2a4a70;
+            --info-text: #79b8ff;
         }
 
         body {
@@ -469,8 +472,23 @@ HTML_TEMPLATE = """
         .subtitle {
             text-align: center;
             color: var(--text-secondary);
-            margin-bottom: 30px;
+            margin-bottom: 20px;
             font-size: 1.1em;
+        }
+
+        /* Info box for refresh notice */
+        .info-box {
+            background: var(--info-bg);
+            border: 1px solid var(--info-border);
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+            color: var(--info-text);
+            text-align: center;
+        }
+
+        .info-box strong {
+            font-weight: 600;
         }
 
         .controls {
@@ -877,7 +895,13 @@ HTML_TEMPLATE = """
         </button>
         
         <h1>{{ display_title }}-Type PokéStops</h1>
-        <div class="subtitle">Last updated: {{ last_updated }} • Updates every minute</div>
+        <div class="subtitle">Last updated: {{ last_updated }}</div>
+        
+        <!-- Info box about manual refresh -->
+        <div class="info-box">
+            <strong>Note:</strong> The server updates data every minute, but this page won't auto-refresh. 
+            Press F5 or refresh your browser to see the latest PokéStops.
+        </div>
         
         <div class="controls">
             <div class="type-selector">
