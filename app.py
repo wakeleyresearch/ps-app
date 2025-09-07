@@ -770,6 +770,8 @@ HTML_TEMPLATE = """
 @app.route('/')
 def get_pokestops():
     """Main route for displaying pokestops."""
+    from collections import OrderedDict  # Add this import
+    
     pokestop_type = request.args.get('type', 'fairy').lower()
     debug = request.args.get('debug', 'false').lower() == 'true'
     
@@ -793,10 +795,16 @@ def get_pokestops():
             'last_updated': 'Unknown'
         }
     
-    # Sort stops by remaining_time descending
-    stops = data.get('stops', {location: [] for location in API_ENDPOINTS.keys()})
-    for location in stops:
-        stops[location] = sorted(stops[location], key=lambda s: s['remaining_time'], reverse=True)
+    # Get stops data
+    stops_data = data.get('stops', {location: [] for location in API_ENDPOINTS.keys()})
+    
+    # Create OrderedDict with correct location order
+    stops = OrderedDict()
+    for location in ['NYC', 'Sydney', 'London', 'Singapore', 'Vancouver']:
+        if location in stops_data:
+            stops[location] = sorted(stops_data[location], key=lambda s: s['remaining_time'], reverse=True)
+        else:
+            stops[location] = []
     
     # Get display title from type_info
     display_title = type_info.get('button_label', type_info.get('display', pokestop_type.capitalize()))
@@ -804,18 +812,23 @@ def get_pokestops():
     try:
         return render_template_string(
             HTML_TEMPLATE,
-            stops=stops,
+            stops=stops,  # Now using ordered stops
             last_updated=data.get('last_updated', datetime.now().strftime('%Y-%m-%d %H:%M:%S')),
             pokestop_type=pokestop_type,
             display_title=display_title,
-            types=POKESTOP_TYPES,  # Pass the whole dict for button labels
+            types=POKESTOP_TYPES,
             debug=debug
         )
     except Exception as e:
         logger.error(f"Render failed for {pokestop_type}: {e}")
+        # Also create ordered dict for error case
+        stops = OrderedDict()
+        for location in ['NYC', 'Sydney', 'London', 'Singapore', 'Vancouver']:
+            stops[location] = []
+        
         return render_template_string(
             HTML_TEMPLATE,
-            stops={location: [] for location in API_ENDPOINTS.keys()},
+            stops=stops,
             last_updated=datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             pokestop_type=pokestop_type,
             display_title=display_title,
