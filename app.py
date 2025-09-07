@@ -332,6 +332,9 @@ signal.signal(signal.SIGTERM, signal_handler)
 signal.signal(signal.SIGINT, signal_handler)
 
 # Modern HTML template with proper button labels
+# Replace the HTML_TEMPLATE variable in your app.py with this updated version
+
+# Modern HTML template with light/dark mode toggle
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
@@ -347,27 +350,117 @@ HTML_TEMPLATE = """
             box-sizing: border-box;
         }
 
+        /* Light mode (default) */
+        :root {
+            --bg-primary: #f8f9fa;
+            --bg-secondary: #ffffff;
+            --bg-container: rgba(255, 255, 255, 0.98);
+            --text-primary: #2c3e50;
+            --text-secondary: #6c757d;
+            --text-muted: #8b95a1;
+            --border-color: #e9ecef;
+            --border-light: #f1f3f4;
+            --accent-primary: #4a90e2;
+            --accent-hover: #357abd;
+            --accent-gradient: linear-gradient(135deg, #4a90e2 0%, #63a4ff 100%);
+            --location-gradient: linear-gradient(90deg, #4a90e2 0%, #63a4ff 100%);
+            --control-bg: #f8f9fa;
+            --shadow-sm: 0 2px 4px rgba(0,0,0,0.04);
+            --shadow-md: 0 4px 8px rgba(0,0,0,0.06);
+            --shadow-lg: 0 10px 20px rgba(0,0,0,0.08);
+            --hover-bg: #f0f4f8;
+            --success-bg: #28a745;
+            --distance-bg: #6c757d;
+        }
+
+        /* Dark mode */
+        [data-theme="dark"] {
+            --bg-primary: #0d1117;
+            --bg-secondary: #161b22;
+            --bg-container: rgba(22, 27, 34, 0.95);
+            --text-primary: #e6edf3;
+            --text-secondary: #8b949e;
+            --text-muted: #6e7681;
+            --border-color: #30363d;
+            --border-light: #21262d;
+            --accent-primary: #58a6ff;
+            --accent-hover: #79b8ff;
+            --accent-gradient: linear-gradient(135deg, #58a6ff 0%, #79b8ff 100%);
+            --location-gradient: linear-gradient(90deg, #58a6ff 0%, #79b8ff 100%);
+            --control-bg: #21262d;
+            --shadow-sm: 0 2px 4px rgba(0,0,0,0.2);
+            --shadow-md: 0 4px 8px rgba(0,0,0,0.3);
+            --shadow-lg: 0 10px 20px rgba(0,0,0,0.4);
+            --hover-bg: #262c36;
+            --success-bg: #238636;
+            --distance-bg: #484f58;
+        }
+
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: #333;
+            background: var(--bg-primary);
+            color: var(--text-primary);
             min-height: 100vh;
             padding: 20px;
+            transition: background 0.3s ease, color 0.3s ease;
         }
 
         .container {
             max-width: 1200px;
             margin: 0 auto;
-            background: rgba(255, 255, 255, 0.95);
-            border-radius: 15px;
+            background: var(--bg-container);
+            border-radius: 12px;
             padding: 30px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-            backdrop-filter: blur(10px);
+            box-shadow: var(--shadow-lg);
+            position: relative;
+        }
+
+        /* Theme toggle button */
+        .theme-toggle {
+            position: absolute;
+            top: 30px;
+            right: 30px;
+            background: var(--control-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 50px;
+            width: 60px;
+            height: 32px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            padding: 4px;
+            transition: all 0.3s ease;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .theme-toggle:hover {
+            box-shadow: var(--shadow-md);
+        }
+
+        .theme-toggle-slider {
+            background: var(--accent-primary);
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.3s ease;
+        }
+
+        [data-theme="dark"] .theme-toggle-slider {
+            transform: translateX(28px);
+        }
+
+        .theme-toggle-icon {
+            width: 14px;
+            height: 14px;
+            fill: white;
         }
 
         h1 {
             text-align: center;
-            color: #2c3e50;
+            color: var(--text-primary);
             margin-bottom: 10px;
             font-size: 2.5em;
             font-weight: 700;
@@ -375,13 +468,13 @@ HTML_TEMPLATE = """
 
         .subtitle {
             text-align: center;
-            color: #7f8c8d;
+            color: var(--text-secondary);
             margin-bottom: 30px;
             font-size: 1.1em;
         }
 
         .controls {
-            background: #f8f9fa;
+            background: var(--control-bg);
             border-radius: 10px;
             padding: 20px;
             margin-bottom: 30px;
@@ -390,6 +483,7 @@ HTML_TEMPLATE = """
             gap: 10px;
             align-items: center;
             justify-content: center;
+            border: 1px solid var(--border-color);
         }
 
         .type-selector {
@@ -401,32 +495,39 @@ HTML_TEMPLATE = """
 
         .type-link {
             padding: 8px 16px;
-            background: #fff;
-            color: #495057;
+            background: var(--bg-secondary);
+            color: var(--text-secondary);
             text-decoration: none;
             border-radius: 20px;
-            border: 2px solid #e9ecef;
+            border: 1px solid var(--border-color);
             transition: all 0.3s ease;
             font-weight: 500;
         }
 
-        .type-link:hover, .type-link.active {
-            background: #007bff;
+        .type-link:hover {
+            background: var(--accent-primary);
             color: white;
-            border-color: #007bff;
+            border-color: var(--accent-primary);
             transform: translateY(-2px);
         }
 
+        .type-link.active {
+            background: var(--accent-gradient);
+            color: white;
+            border-color: transparent;
+        }
+
         .location-section {
-            background: white;
+            background: var(--bg-secondary);
             border-radius: 12px;
             margin-bottom: 25px;
             overflow: hidden;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.07);
+            box-shadow: var(--shadow-md);
+            border: 1px solid var(--border-color);
         }
 
         .location-header {
-            background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);
+            background: var(--location-gradient);
             color: white;
             padding: 20px;
             display: flex;
@@ -448,6 +549,7 @@ HTML_TEMPLATE = """
             cursor: pointer;
             transition: all 0.3s ease;
             font-size: 0.9em;
+            backdrop-filter: blur(10px);
         }
 
         .sort-btn:hover {
@@ -461,7 +563,7 @@ HTML_TEMPLATE = """
 
         .stop-item {
             padding: 15px 20px;
-            border-bottom: 1px solid #f1f3f4;
+            border-bottom: 1px solid var(--border-light);
             display: flex;
             align-items: center;
             justify-content: space-between;
@@ -469,7 +571,7 @@ HTML_TEMPLATE = """
         }
 
         .stop-item:hover {
-            background: #f8f9fa;
+            background: var(--hover-bg);
         }
 
         .stop-item:last-child {
@@ -482,12 +584,12 @@ HTML_TEMPLATE = """
 
         .stop-name {
             font-weight: 600;
-            color: #2c3e50;
+            color: var(--text-primary);
             margin-bottom: 4px;
         }
 
         .stop-details {
-            color: #6c757d;
+            color: var(--text-secondary);
             font-size: 0.9em;
             display: flex;
             gap: 15px;
@@ -495,12 +597,13 @@ HTML_TEMPLATE = """
         }
 
         .stop-link {
-            color: #007bff;
+            color: var(--accent-primary);
             text-decoration: none;
         }
 
         .stop-link:hover {
             text-decoration: underline;
+            color: var(--accent-hover);
         }
 
         .stop-meta {
@@ -511,7 +614,7 @@ HTML_TEMPLATE = """
         }
 
         .time-remaining {
-            background: #28a745;
+            background: var(--success-bg);
             color: white;
             padding: 4px 8px;
             border-radius: 12px;
@@ -520,7 +623,7 @@ HTML_TEMPLATE = """
         }
 
         .distance-info {
-            background: #6c757d;
+            background: var(--distance-bg);
             color: white;
             padding: 2px 6px;
             border-radius: 8px;
@@ -529,7 +632,7 @@ HTML_TEMPLATE = """
 
         .no-stops {
             text-align: center;
-            color: #6c757d;
+            color: var(--text-secondary);
             padding: 40px 20px;
             font-style: italic;
         }
@@ -540,7 +643,7 @@ HTML_TEMPLATE = """
 
         .debug {
             font-size: 0.8em;
-            color: #6c757d;
+            color: var(--text-muted);
             margin-top: 4px;
         }
 
@@ -551,6 +654,11 @@ HTML_TEMPLATE = """
             
             .container {
                 padding: 20px;
+            }
+            
+            .theme-toggle {
+                top: 20px;
+                right: 20px;
             }
             
             h1 {
@@ -586,6 +694,30 @@ HTML_TEMPLATE = """
         };
         var isDebug = {{ debug | tojson }};
         var sortMode = {};
+        
+        // Theme management
+        function initTheme() {
+            const savedTheme = localStorage.getItem('theme') || 'light';
+            document.documentElement.setAttribute('data-theme', savedTheme);
+            updateThemeIcon(savedTheme);
+        }
+        
+        function toggleTheme() {
+            const currentTheme = document.documentElement.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            updateThemeIcon(newTheme);
+        }
+        
+        function updateThemeIcon(theme) {
+            const icon = document.getElementById('theme-icon');
+            if (theme === 'dark') {
+                icon.innerHTML = '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>';
+            } else {
+                icon.innerHTML = '<circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>';
+            }
+        }
         
         // Distance calculation function
         function distance(a, b) {
@@ -714,6 +846,9 @@ HTML_TEMPLATE = """
         
         // Initialize on page load
         document.addEventListener('DOMContentLoaded', function() {
+            // Initialize theme
+            initTheme();
+            
             // Initialize all locations with time-based sorting
             Object.keys(stopsData).forEach(location => {
                 sortMode[location] = 'time';
@@ -724,6 +859,23 @@ HTML_TEMPLATE = """
 </head>
 <body>
     <div class="container">
+        <!-- Theme Toggle Button -->
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
+            <div class="theme-toggle-slider">
+                <svg id="theme-icon" class="theme-toggle-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="5"></circle>
+                    <line x1="12" y1="1" x2="12" y2="3"></line>
+                    <line x1="12" y1="21" x2="12" y2="23"></line>
+                    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                    <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                    <line x1="1" y1="12" x2="3" y2="12"></line>
+                    <line x1="21" y1="12" x2="23" y2="12"></line>
+                    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                    <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                </svg>
+            </div>
+        </button>
+        
         <h1>{{ display_title }}-Type PokéStops</h1>
         <div class="subtitle">Last updated: {{ last_updated }} • Updates every minute</div>
         
