@@ -37,39 +37,39 @@ class AppConfig:
     NORDVPN_PROXY_USER: str = os.getenv('NORDVPN_PROXY_USER', '')
     NORDVPN_PROXY_PASS: str = os.getenv('NORDVPN_PROXY_PASS', '')
 
-# API endpoints
+# API endpoints - REORDERED: NYC > Sydney > London > Singapore > Vancouver
 API_ENDPOINTS = {
     'NYC': 'https://nycpokemap.com/pokestop.php',
-    'Vancouver': 'https://vanpokemap.com/pokestop.php',
-    'Singapore': 'https://sgpokemap.com/pokestop.php',
+    'Sydney': 'https://sydneypogomap.com/pokestop.php',
     'London': 'https://londonpogomap.com/pokestop.php',
-    'Sydney': 'https://sydneypogomap.com/pokestop.php'
+    'Singapore': 'https://sgpokemap.com/pokestop.php',
+    'Vancouver': 'https://vanpokemap.com/pokestop.php'
 }
 
 # Grunt type configuration with gender-separated water types
 POKESTOP_TYPES = {
-    'gruntmale': {'ids': [4], 'gender': {4: 'Male'}, 'display': 'Grunt'},
-    'gruntfemale': {'ids': [5], 'gender': {5: 'Female'}, 'display': 'Grunt'},
-    'bug': {'ids': [6, 7], 'gender': {7: 'Male', 6: 'Female'}, 'display': 'Bug'},
-    'dark': {'ids': [10, 11], 'gender': {11: 'Male', 10: 'Female'}, 'display': 'Dark'},
-    'dragon': {'ids': [12, 13], 'gender': {13: 'Male', 12: 'Female'}, 'display': 'Dragon'},
-    'fairy': {'ids': [14, 15], 'gender': {15: 'Male', 14: 'Female'}, 'display': 'Fairy'},
-    'fighting': {'ids': [16, 17], 'gender': {17: 'Male', 16: 'Female'}, 'display': 'Fighting'},
-    'fire': {'ids': [18, 19], 'gender': {19: 'Male', 18: 'Female'}, 'display': 'Fire'},
-    'flying': {'ids': [20, 21], 'gender': {21: 'Male', 20: 'Female'}, 'display': 'Flying'},
-    'grass': {'ids': [22, 23], 'gender': {23: 'Male', 22: 'Female'}, 'display': 'Grass'},
-    'ground': {'ids': [24, 25], 'gender': {25: 'Male', 24: 'Female'}, 'display': 'Ground'},
-    'ice': {'ids': [26, 27], 'gender': {27: 'Male', 26: 'Female'}, 'display': 'Ice'},
-    'metal': {'ids': [28, 29], 'gender': {29: 'Male', 28: 'Female'}, 'display': 'Metal'},
-    'normal': {'ids': [30, 31], 'gender': {31: 'Male', 30: 'Female'}, 'display': 'Normal'},
-    'poison': {'ids': [32, 33], 'gender': {33: 'Male', 32: 'Female'}, 'display': 'Poison'},
-    'psychic': {'ids': [34, 35], 'gender': {35: 'Male', 34: 'Female'}, 'display': 'Psychic'},
-    'rock': {'ids': [36, 37], 'gender': {37: 'Male', 36: 'Female'}, 'display': 'Rock'},
-    # Gender-separated water types
-    'waterfemale': {'ids': [38], 'gender': {38: 'Female'}, 'display': 'Water'},
-    'watermale': {'ids': [39], 'gender': {39: 'Male'}, 'display': 'Water'},
-    'electric': {'ids': [48, 49], 'gender': {49: 'Male', 48: 'Female'}, 'display': 'Electric'},
-    'ghost': {'ids': [47, 48], 'gender': {47: 'Male', 48: 'Female'}, 'display': 'Ghost'}
+    'gruntmale': {'ids': [4], 'gender': {4: 'Male'}, 'display': 'Grunt', 'button_label': 'Grunt (Male)'},
+    'gruntfemale': {'ids': [5], 'gender': {5: 'Female'}, 'display': 'Grunt', 'button_label': 'Grunt (Female)'},
+    'bug': {'ids': [6, 7], 'gender': {7: 'Male', 6: 'Female'}, 'display': 'Bug', 'button_label': 'Bug'},
+    'dark': {'ids': [10, 11], 'gender': {11: 'Male', 10: 'Female'}, 'display': 'Dark', 'button_label': 'Dark'},
+    'dragon': {'ids': [12, 13], 'gender': {13: 'Male', 12: 'Female'}, 'display': 'Dragon', 'button_label': 'Dragon'},
+    'fairy': {'ids': [14, 15], 'gender': {15: 'Male', 14: 'Female'}, 'display': 'Fairy', 'button_label': 'Fairy'},
+    'fighting': {'ids': [16, 17], 'gender': {17: 'Male', 16: 'Female'}, 'display': 'Fighting', 'button_label': 'Fighting'},
+    'fire': {'ids': [18, 19], 'gender': {19: 'Male', 18: 'Female'}, 'display': 'Fire', 'button_label': 'Fire'},
+    'flying': {'ids': [20, 21], 'gender': {21: 'Male', 20: 'Female'}, 'display': 'Flying', 'button_label': 'Flying'},
+    'grass': {'ids': [22, 23], 'gender': {23: 'Male', 22: 'Female'}, 'display': 'Grass', 'button_label': 'Grass'},
+    'ground': {'ids': [24, 25], 'gender': {25: 'Male', 24: 'Female'}, 'display': 'Ground', 'button_label': 'Ground'},
+    'ice': {'ids': [26, 27], 'gender': {27: 'Male', 26: 'Female'}, 'display': 'Ice', 'button_label': 'Ice'},
+    'metal': {'ids': [28, 29], 'gender': {29: 'Male', 28: 'Female'}, 'display': 'Metal', 'button_label': 'Metal'},
+    'normal': {'ids': [30, 31], 'gender': {31: 'Male', 30: 'Female'}, 'display': 'Normal', 'button_label': 'Normal'},
+    'poison': {'ids': [32, 33], 'gender': {33: 'Male', 32: 'Female'}, 'display': 'Poison', 'button_label': 'Poison'},
+    'psychic': {'ids': [34, 35], 'gender': {35: 'Male', 34: 'Female'}, 'display': 'Psychic', 'button_label': 'Psychic'},
+    'rock': {'ids': [36, 37], 'gender': {37: 'Male', 36: 'Female'}, 'display': 'Rock', 'button_label': 'Rock'},
+    # Gender-separated water types with proper button labels
+    'waterfemale': {'ids': [38], 'gender': {38: 'Female'}, 'display': 'Water', 'button_label': 'Water (Female)'},
+    'watermale': {'ids': [39], 'gender': {39: 'Male'}, 'display': 'Water', 'button_label': 'Water (Male)'},
+    'electric': {'ids': [48, 49], 'gender': {49: 'Male', 48: 'Female'}, 'display': 'Electric', 'button_label': 'Electric'},
+    'ghost': {'ids': [47, 48], 'gender': {47: 'Male', 48: 'Female'}, 'display': 'Ghost', 'button_label': 'Ghost'}
 }
 
 # Load config

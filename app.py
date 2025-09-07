@@ -1,3 +1,4 @@
+# app.py
 from flask import Flask, render_template_string, request
 import requests
 from datetime import datetime
@@ -29,37 +30,38 @@ INITIAL_FETCH_TIMEOUT = 10
 MAX_WORKERS = 5
 CACHE_DIR = '/app/cache'
 
-# Grunt type configuration
+# Grunt type configuration - imported from config but kept here for reference
 POKESTOP_TYPES = {
-    'gruntmale': {'ids': [4], 'gender': {4: 'Male'}, 'display': 'Grunt'},
-    'gruntfemale': {'ids': [5], 'gender': {5: 'Female'}, 'display': 'Grunt'},
-    'bug': {'ids': [6, 7], 'gender': {7: 'Male', 6: 'Female'}, 'display': 'Bug'},
-    'dark': {'ids': [10, 11], 'gender': {11: 'Male', 10: 'Female'}, 'display': 'Dark'},
-    'dragon': {'ids': [12, 13], 'gender': {13: 'Male', 12: 'Female'}, 'display': 'Dragon'},
-    'fairy': {'ids': [14, 15], 'gender': {15: 'Male', 14: 'Female'}, 'display': 'Fairy'},
-    'fighting': {'ids': [16, 17], 'gender': {17: 'Male', 16: 'Female'}, 'display': 'Fighting'},
-    'fire': {'ids': [18, 19], 'gender': {19: 'Male', 18: 'Female'}, 'display': 'Fire'},
-    'flying': {'ids': [20, 21], 'gender': {21: 'Male', 20: 'Female'}, 'display': 'Flying'},
-    'grass': {'ids': [22, 23], 'gender': {23: 'Male', 22: 'Female'}, 'display': 'Grass'},
-    'ground': {'ids': [24, 25], 'gender': {25: 'Male', 24: 'Female'}, 'display': 'Ground'},
-    'ice': {'ids': [26, 27], 'gender': {27: 'Male', 26: 'Female'}, 'display': 'Ice'},
-    'metal': {'ids': [28, 29], 'gender': {29: 'Male', 28: 'Female'}, 'display': 'Metal'},
-    'normal': {'ids': [30, 31], 'gender': {31: 'Male', 30: 'Female'}, 'display': 'Normal'},
-    'poison': {'ids': [32, 33], 'gender': {33: 'Male', 32: 'Female'}, 'display': 'Poison'},
-    'psychic': {'ids': [34, 35], 'gender': {35: 'Male', 34: 'Female'}, 'display': 'Psychic'},
-    'rock': {'ids': [36, 37], 'gender': {37: 'Male', 36: 'Female'}, 'display': 'Rock'},
-    'water': {'ids': [38, 39], 'gender': {39: 'Male', 38: 'Female'}, 'display': 'Water'},
-    'electric': {'ids': [48, 49], 'gender': {49: 'Male', 48: 'Female'}, 'display': 'Electric'},
-    'ghost': {'ids': [47, 48], 'gender': {47: 'Male', 48: 'Female'}, 'display': 'Ghost'}
+    'gruntmale': {'ids': [4], 'gender': {4: 'Male'}, 'display': 'Grunt', 'button_label': 'Grunt (Male)'},
+    'gruntfemale': {'ids': [5], 'gender': {5: 'Female'}, 'display': 'Grunt', 'button_label': 'Grunt (Female)'},
+    'bug': {'ids': [6, 7], 'gender': {7: 'Male', 6: 'Female'}, 'display': 'Bug', 'button_label': 'Bug'},
+    'dark': {'ids': [10, 11], 'gender': {11: 'Male', 10: 'Female'}, 'display': 'Dark', 'button_label': 'Dark'},
+    'dragon': {'ids': [12, 13], 'gender': {13: 'Male', 12: 'Female'}, 'display': 'Dragon', 'button_label': 'Dragon'},
+    'fairy': {'ids': [14, 15], 'gender': {15: 'Male', 14: 'Female'}, 'display': 'Fairy', 'button_label': 'Fairy'},
+    'fighting': {'ids': [16, 17], 'gender': {17: 'Male', 16: 'Female'}, 'display': 'Fighting', 'button_label': 'Fighting'},
+    'fire': {'ids': [18, 19], 'gender': {19: 'Male', 18: 'Female'}, 'display': 'Fire', 'button_label': 'Fire'},
+    'flying': {'ids': [20, 21], 'gender': {21: 'Male', 20: 'Female'}, 'display': 'Flying', 'button_label': 'Flying'},
+    'grass': {'ids': [22, 23], 'gender': {23: 'Male', 22: 'Female'}, 'display': 'Grass', 'button_label': 'Grass'},
+    'ground': {'ids': [24, 25], 'gender': {25: 'Male', 24: 'Female'}, 'display': 'Ground', 'button_label': 'Ground'},
+    'ice': {'ids': [26, 27], 'gender': {27: 'Male', 26: 'Female'}, 'display': 'Ice', 'button_label': 'Ice'},
+    'metal': {'ids': [28, 29], 'gender': {29: 'Male', 28: 'Female'}, 'display': 'Metal', 'button_label': 'Metal'},
+    'normal': {'ids': [30, 31], 'gender': {31: 'Male', 30: 'Female'}, 'display': 'Normal', 'button_label': 'Normal'},
+    'poison': {'ids': [32, 33], 'gender': {33: 'Male', 32: 'Female'}, 'display': 'Poison', 'button_label': 'Poison'},
+    'psychic': {'ids': [34, 35], 'gender': {35: 'Male', 34: 'Female'}, 'display': 'Psychic', 'button_label': 'Psychic'},
+    'rock': {'ids': [36, 37], 'gender': {37: 'Male', 36: 'Female'}, 'display': 'Rock', 'button_label': 'Rock'},
+    'waterfemale': {'ids': [38], 'gender': {38: 'Female'}, 'display': 'Water', 'button_label': 'Water (Female)'},
+    'watermale': {'ids': [39], 'gender': {39: 'Male'}, 'display': 'Water', 'button_label': 'Water (Male)'},
+    'electric': {'ids': [48, 49], 'gender': {49: 'Male', 48: 'Female'}, 'display': 'Electric', 'button_label': 'Electric'},
+    'ghost': {'ids': [47, 48], 'gender': {47: 'Male', 48: 'Female'}, 'display': 'Ghost', 'button_label': 'Ghost'}
 }
 
-# API endpoints
+# API endpoints - REORDERED: NYC > Sydney > London > Singapore > Vancouver
 API_ENDPOINTS = {
     'NYC': 'https://nycpokemap.com/pokestop.php',
-    'Vancouver': 'https://vanpokemap.com/pokestop.php',
-    'Singapore': 'https://sgpokemap.com/pokestop.php',
+    'Sydney': 'https://sydneypogomap.com/pokestop.php',
     'London': 'https://londonpogomap.com/pokestop.php',
-    'Sydney': 'https://sydneypogomap.com/pokestop.php'
+    'Singapore': 'https://sgpokemap.com/pokestop.php',
+    'Vancouver': 'https://vanpokemap.com/pokestop.php'
 }
 
 class TypeManager:
@@ -289,17 +291,28 @@ class DataFetcher:
         return stops
     
     def _matches_type(self, character_id: int, grunt_dialogue: str, pokestop_type: str, character_ids: list) -> bool:
+        # Direct character ID match
         if character_id in character_ids:
+            # Special handling for electric type (shares IDs with ghost)
             if pokestop_type == 'electric':
                 return any(kw in grunt_dialogue for kw in ['shock', 'electric', 'volt', 'charge'])
             return True
         
+        # Grunt type matching
         if pokestop_type.startswith('grunt') and 'grunt' in grunt_dialogue:
             return True
         
+        # Type dialogue matching (not for grunt types)
         if not pokestop_type.startswith('grunt'):
+            # Water types - check for water dialogue
+            if pokestop_type in ['waterfemale', 'watermale']:
+                return 'water' in grunt_dialogue
+            
+            # Regular type matching
             if pokestop_type.lower() in grunt_dialogue:
                 return True
+            
+            # Ghost special case
             if pokestop_type == 'ghost' and 'ke...ke...' in grunt_dialogue:
                 return True
         
@@ -318,14 +331,14 @@ def signal_handler(signum, frame):
 signal.signal(signal.SIGTERM, signal_handler)
 signal.signal(signal.SIGINT, signal_handler)
 
-# Modern HTML template
+# Modern HTML template with proper button labels
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ pokestop_type.capitalize() }}-Type PokéStops</title>
+    <title>{{ display_title }}-Type PokéStops</title>
     <meta http-equiv="refresh" content="60">
     <style>
         * {
@@ -395,7 +408,6 @@ HTML_TEMPLATE = """
             border: 2px solid #e9ecef;
             transition: all 0.3s ease;
             font-weight: 500;
-            text-transform: capitalize;
         }
 
         .type-link:hover, .type-link.active {
@@ -712,15 +724,15 @@ HTML_TEMPLATE = """
 </head>
 <body>
     <div class="container">
-        <h1>{{ pokestop_type.capitalize() }}-Type PokéStops</h1>
+        <h1>{{ display_title }}-Type PokéStops</h1>
         <div class="subtitle">Last updated: {{ last_updated }} • Updates every minute</div>
         
         <div class="controls">
             <div class="type-selector">
-                {% for type in types %}
-                    <a href="?type={{ type }}{% if debug %}&debug=true{% endif %}" 
-                       class="type-link{% if type == pokestop_type %} active{% endif %}">
-                        {{ type.capitalize() }}
+                {% for type_key, type_info in types.items() %}
+                    <a href="?type={{ type_key }}{% if debug %}&debug=true{% endif %}" 
+                       class="type-link{% if type_key == pokestop_type %} active{% endif %}">
+                        {{ type_info.button_label }}
                     </a>
                 {% endfor %}
             </div>
@@ -742,9 +754,9 @@ HTML_TEMPLATE = """
                 {% else %}
                     <div class="no-stops">
                         {% if last_updated == 'Unknown' %}
-                            <span class="loading">Loading {{ pokestop_type.capitalize() }}-type data...</span>
+                            <span class="loading">Loading {{ display_title }}-type data...</span>
                         {% else %}
-                            No {{ pokestop_type.capitalize() }}-type PokéStops found in {{ location }}.
+                            No {{ display_title }}-type PokéStops found in {{ location }}.
                         {% endif %}
                     </div>
                 {% endif %}
@@ -786,13 +798,17 @@ def get_pokestops():
     for location in stops:
         stops[location] = sorted(stops[location], key=lambda s: s['remaining_time'], reverse=True)
     
+    # Get display title from type_info
+    display_title = type_info.get('button_label', type_info.get('display', pokestop_type.capitalize()))
+    
     try:
         return render_template_string(
             HTML_TEMPLATE,
             stops=stops,
             last_updated=data.get('last_updated', datetime.now().strftime('%Y-%m-%d %H:%M:%S')),
             pokestop_type=pokestop_type,
-            types=POKESTOP_TYPES.keys(),
+            display_title=display_title,
+            types=POKESTOP_TYPES,  # Pass the whole dict for button labels
             debug=debug
         )
     except Exception as e:
@@ -802,7 +818,8 @@ def get_pokestops():
             stops={location: [] for location in API_ENDPOINTS.keys()},
             last_updated=datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             pokestop_type=pokestop_type,
-            types=POKESTOP_TYPES.keys(),
+            display_title=display_title,
+            types=POKESTOP_TYPES,
             debug=debug
         ), 500
 
